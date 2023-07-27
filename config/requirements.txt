@@ -1,0 +1,4 @@
+# Name                    Version                   Build  Channel
+pandas                    1.5.2            py39hf11a4ad_0  
+h5py                      3.7.0            py39h3de5c98_0  
+numpy                     1.23.5           py39h3b20f71_0  
