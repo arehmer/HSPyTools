@@ -12,7 +12,7 @@ from pathlib import Path
 import ctypes
 from scipy.interpolate import LinearNDInterpolator as lNDI
 
-from ..tpiles.tparray import TPArray
+from .tparray import TPArray
 
 class HTPAdGUI_FileReader():
     

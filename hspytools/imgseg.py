@@ -7,20 +7,13 @@ Created on Wed Jun 21 11:31:05 2023
 
 import os
 
-import pandas as pd
+
 import numpy as np
 
 import matplotlib
 
 import matplotlib.pyplot as plt
 from pathlib import Path
-
-from scipy.cluster.hierarchy import dendrogram, linkage
-from sklearn.cluster import AgglomerativeClustering
-
-from ..tpiles.tparray import TPArray
-import hsfit.imgseg.helpers as hlp
-
 
     
 class Seg():
@@ -213,7 +206,7 @@ class RegionSeg(Seg):
 
         
         # Calculate distance of each pixel from center of gravity
-        df_dist = hlp.dist_from_center(img_temp)
+        df_dist = dist_from_center(img_temp)
      
         # Select pixels inside specified radius
         idx_sel = df_dist.loc[(df_dist['d']<=self.r) &\
@@ -232,6 +225,157 @@ class RegionSeg(Seg):
         self.img_seg = img_seg
         
         return img_seg
+
         
-        
+def dist_from_center(img):
     
+    data = []
+    
+    # replace all nan with zeros for this calculation
+    img_nonan = np.nan_to_num(img)
+    
+    center = ndimage.center_of_mass(abs(img_nonan))
+    
+    for y in range(img.shape[0]):
+        for x in range(img.shape[1]):
+            dist = np.sqrt((x-center[1])**2+(y-center[0])**2)
+            data.append([x,y,img[y,x],dist])
+    
+    df = pd.DataFrame(data = data, columns = ['x','y','p','d'])
+    
+    
+    return df
+
+def hierarch_clust(img,**kwargs):
+    '''
+    Performs hierarchical clustering on an image given as numpy array
+    
+
+    Parameters
+    ----------
+    df : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
+    
+    dK_std_lim = kwargs.pop('dK_std_lim',0.01)
+    dK_lim = kwargs.pop('dK_lim',1)
+    
+    n_clusters_lim = kwargs.pop('n_clusters_lim',20)
+        
+    # Calculate distance from center
+    df = dist_from_center(img)
+   
+    # A boolean that controls when to stop
+    iterate = True
+    
+    # Number of clusters to start with
+    n_clusters = 3
+   
+    while iterate == True:
+        
+        # Perform hierarchical clustering
+        hierarchical_cluster = AgglomerativeClustering(n_clusters=n_clusters,
+                                                       affinity='euclidean',
+                                                       linkage='ward',
+                                                       compute_distances=True)
+       
+        # Cluster with non nan values
+        idx_nonan = df.loc[~df['p'].isna()].index
+        
+        hierarchical_cluster.fit(df.loc[idx_nonan,['d','p']])
+       
+        df.loc[idx_nonan,'cluster'] = hierarchical_cluster.labels_ 
+        
+        # distances in cluster space
+        # df.loc[idx_nonan,'clust_dist'] = hierarchical_cluster.distances_
+        
+        # Evaluate some statistics on found clusters
+        df_stat = pd.DataFrame(columns = ['mean_p','std_p','mean_d','std_d']) 
+        
+        for c in df.loc[idx_nonan,'cluster'].unique():
+            mean_p = df.loc[df['cluster']==c,'p'].mean()
+            std_p = df.loc[df['cluster']==c,'p'].std()
+            
+            mean_d = df.loc[df['cluster']==c,'d'].mean()
+            std_d = df.loc[df['cluster']==c,'d'].std()
+            
+            df_stat.loc[int(c)] = [mean_p,std_p,mean_d,std_d]
+                        
+        # std_rel = abs(df_stat.loc[idx,'std']/df_stat.loc[idx,'mean'])
+        dK_std = abs(df_stat['std_p']/df_stat['std_d'])
+        dK = df_stat['mean_p'].diff().abs().min()
+        
+        
+        # Do not consider clusters with zero standard deviation (=background)
+        dK_std = dK_std.loc[~dK_std.isna()]
+        # dK = 
+        
+        if all(dK_std <= dK_std_lim) or dK < dK_lim or\
+            (n_clusters>=n_clusters_lim):
+            iterate = False
+        else:
+            n_clusters = n_clusters + 1
+        
+        
+    return df,df_stat
+    
+
+
+def otsu_thresholding(img):
+    
+    def compute_otsu_criteria(im, th):
+        # create the thresholded image
+        thresholded_im = np.zeros(im.shape)
+        thresholded_im[im >= th] = 1
+
+        # compute weights
+        nb_pixels = im.size
+        nb_pixels1 = np.count_nonzero(thresholded_im)
+        weight1 = nb_pixels1 / nb_pixels
+        weight0 = 1 - weight1
+
+        # if one of the classes is empty, eg all pixels are below or above the threshold, that threshold will not be considered
+        # in the search for the best threshold
+        if weight1 == 0 or weight0 == 0:
+            return np.inf
+
+        # find all pixels belonging to each class
+        val_pixels1 = im[thresholded_im == 1]
+        val_pixels0 = im[thresholded_im == 0]
+
+        # compute variance of these classes
+        var1 = np.var(val_pixels1) if len(val_pixels1) > 0 else 0
+        var0 = np.var(val_pixels0) if len(val_pixels0) > 0 else 0
+
+        return weight0 * var0 + weight1 * var1
+    
+    # Otsu thresholding only works for positive pixel intensities
+    if np.min(img) < 0:
+        offset = abs(np.min(img))
+    else:
+        offset = 0
+
+    img_off = img + offset
+    
+    # testing all thresholds from 0 to the maximum of the image
+    threshold_range = range(int(np.max(img_off))+1)
+    criterias = [compute_otsu_criteria(img_off, th) for th in threshold_range]
+    
+    # best threshold is the one minimizing the Otsu criteria
+    best_threshold = threshold_range[np.argmin(criterias)]
+    
+    # Compensate for offset
+    best_threshold = best_threshold - offset
+    
+    # Threshold image
+    img_below = img.copy()
+    img_above = img.copy()
+    img_below[img_below>best_threshold] = np.nan
+    img_above[img_above<best_threshold] = np.nan
+    
+    return img_below,img_above
