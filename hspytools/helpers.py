@@ -5,11 +5,9 @@ Created on Thu May 25 09:15:16 2023
 @author: Rehmer
 """
 
-import pickle as pkl
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import ctypes
 from scipy.interpolate import LinearNDInterpolator as lNDI
 
 from .tparray import TPArray
