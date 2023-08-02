@@ -12,6 +12,72 @@ import warnings
 
 
 class hdf5_mgr():
+
+    def __init__(self,hdf5_path,width,height,**kwargs):
+        """
+        Initializes the container and links it to the hdf5 file specified via 
+        the given path.
+        
+        Parameters
+        ----------
+        path : str
+            path to the hdf5-file that already exists or will be created by
+            calling this method.
+        mode : char
+            A character specifying what should be done if the file already
+            exists. 
+            'a': Read/write if exists, create otherwise
+            'w': overwrite
+            
+        Returns
+        -------
+        None.
+        """
+        
+        mode = kwargs.pop('mode','a')
+        
+        
+        self.tparray = TPArray(width,height)
+        
+        # Check if file exists
+        if os.path.isfile(hdf5_path) == True:
+            file_exists = True
+            print('Specified file already exists.' )
+        else:
+            file_exists = False
+            
+        if file_exists and mode == 'w':
+            print('Existing file is deleted.')
+            os.remove(hdf5_path)
+            
+        
+        # open hdf5_file or create if it doesn't exist
+        hdf5_file = h5py.File(hdf5_path, "a")
+        
+        # Check if hdf5_file is empty
+        if len(hdf5_file.keys()) == 0:
+            is_empty = True
+        else:
+            is_empty = False
+            # Close hdf5 file
+        
+        # Save path of hdf5 file for future reference
+        self._hdf5_path = hdf5_file.filename
+        
+        hdf5_file.close()
+        
+        # Create a DataFrame which will be the index of all measurements
+        # in the file
+        if is_empty:
+            
+            
+            columns = ['Ta','To','device','address','BCC','LuT','blind',
+                       'mean','diff']
+            
+            df_index = pd.DataFrame(data = [],
+                                    columns = columns)
+            
+            df_index.to_hdf(hdf5_path, 'index')
     
     def import_LuT(self,lut_path,device,**kwargs):
         """
