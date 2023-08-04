@@ -28,17 +28,17 @@ class HTPAdGUI_FileReader():
         
     def read_htpa_video(self,path):
         
-        # Check if path is provided as pathlib path or string
-        if isinstance(path,Path):
-            path = path.as_posix()
+        # Check if path is provided as pathlib
+        if not isinstance(path,Path):
+            path = Path(path)
         
-        # Check the last 4 characters in path for file extension
-        extension = path[-4::]
-        
-        if extension.casefold() == ('.txt').casefold():
-            df_video = self._import_txt(path) 
-        elif extension.casefold() == ('.bds').casefold():
-            df_video = self._import_bds(path)
+        # get suffix
+        suffix = path.suffix
+
+        if suffix.casefold() == ('.txt').casefold():
+            df_video, header = self._import_txt(path) 
+        elif suffix.casefold() == ('.bds').casefold():
+            df_video, header = self._import_bds(path)
         else:
             print('File extension not recognized.')
             return None
@@ -48,7 +48,7 @@ class HTPAdGUI_FileReader():
               
         # df_video = self._flip(df_video)
         
-        return df_video
+        return df_video, header
     
     def _import_txt(self,path,**kwargs):
         
@@ -74,8 +74,10 @@ class HTPAdGUI_FileReader():
         # rename index appropriately
         txt_content.index = range(1,len(txt_content)+1)
         txt_content.index.name = 'image_id'
-                
-        return txt_content
+        
+        header = None
+        
+        return txt_content, header
     
     def _import_bds(self,bds_path,**kwargs):
         
@@ -85,7 +87,7 @@ class HTPAdGUI_FileReader():
         with open(bds_path, "rb") as f:
             
             # Skip header, i.e. first 32 bytes
-            f.read(31)
+            header = f.read(31)
             
             # Read two bytes at a time 
             while (LSb := f.read(2)):
@@ -98,6 +100,10 @@ class HTPAdGUI_FileReader():
         # Cast the data to a DataFrame of appropriate size
         columns = self.tparray.get_serial_data_order()
         
+        # If the last frame has not been fully transmitted, reshaping fails
+        # Therefore throw out the last incomplete frame
+        num_full_frames = int(len(bds_content)/len(columns))
+        bds_content = bds_content[0:num_full_frames*len(columns)]
         bds_content = (np.array(bds_content)).reshape(-1,len(columns))
         bds_content = pd.DataFrame(data=bds_content,
                                    columns = columns)
@@ -105,8 +111,109 @@ class HTPAdGUI_FileReader():
         bds_content.index = range(1,len(bds_content)+1)
         bds_content.index.name = 'image_id'
         
-
+        return bds_content, header
         
+    def reverse(self,df_video):
+        """
+        Function for rotating a video by 180°. Intended for postprocessing 
+        a video sequence from a sensor that was mounted upside-down
+
+        Parameters
+        ----------
+        df_video : pd.DataFrame
+            DataFrame containing the content of a text or bds file exported 
+            from the HTPAdGUI
+
+        Returns
+        -------
+        df_video: pd.DataFrame
+            Upside-down version of the original video.
+
+        """
+        
+        # Rotation must be applied to the pixel values and the electrical offsets
+        pix_cols = self.tparray._pix
+        e_off_cols = self.tparray._e_off
+        
+        NROFBLOCKS = self.tparray._DevConst['NROFBLOCKS']
+        width = self.tparray._width
+        height = self.tparray._height
+        
+        # go through the DataFrame image by image
+        for i in df_video.index:
+            
+            # get pixel and electrical offsets values
+            pix_val = df_video.loc[i,pix_cols]
+            e_off_val = df_video.loc[i,e_off_cols]
+            
+            # reshape values according to sensor
+            pix_val = pix_val.values.reshape(self.tparray._npsize)
+            e_off_val = e_off_val.values.reshape((int(height/NROFBLOCKS),
+                                                  width))
+            
+            # rotate both arrays by 180°
+            pix_val = np.rot90(pix_val,k=2)
+            e_off_val = np.rot90(e_off_val,k=2)
+            
+            # reshape to a row vector and write to dataframe
+            df_video.loc[i,pix_cols] = pix_val.flatten()
+            df_video.loc[i,e_off_cols] = e_off_val.flatten()
+            
+        # Return the rotated dataframe
+        return df_video
+    
+    def export_bds(self,df_video,header,bds_path,**kwargs):
+        """
+        Export a video sequence in dataframe format to a .bds file that is
+        compatible with HTPAdGUI
+        
+
+        Parameters
+        ----------
+        df_video : pd.DataFrame
+            DESCRIPTION.
+        header : byte
+            DESCRIPTION.
+        path : pathlib.Path
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        mode = kwargs.pop('mode','x')
+        
+        
+        # Check if file already exists
+        if bds_path.exists():
+            if mode=='x':
+                print('File exists. No data will be written. Pass mode="x" to overwrite.')
+            elif mode=='w':
+                print('File exists and will be overwritten.')
+                os.remove(bds_path)
+        
+        # first write the header to the list byte by byte
+        bds_content = []
+        bds_content.append(header)
+        # Go over the video sequence image by image, convert all integers to 
+        # bytes and append to the list
+        
+        for i in df_video.index:
+            
+            # get the whole row as a row vector
+            row = df_video.loc[i].values
+            
+            # cast every integer to a byte in little endian byteorder
+            for val in row:
+                bds_content.append(int(val).to_bytes(length=2,byteorder='little'))
+            
+        # Write bytes to file
+        with open(bds_path, "wb") as bds_file:
+            [bds_file.write(b) for b in bds_content]
+            
+        return None
     
     def _flip(self,df_video):
 

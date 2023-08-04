@@ -9,11 +9,12 @@ from pathlib import Path
 import h5py
 import numpy as np
 import warnings
+import os
 
 
 class hdf5_mgr():
 
-    def __init__(self,hdf5_path,width,height,**kwargs):
+    def __init__(self,hdf5_path,**kwargs):
         """
         Initializes the container and links it to the hdf5 file specified via 
         the given path.
@@ -35,9 +36,13 @@ class hdf5_mgr():
         """
         
         mode = kwargs.pop('mode','a')
+        width = kwargs.pop('width',None)
+        height = kwargs.pop('height',None)
         
-        
-        self.tparray = TPArray(width,height)
+        if width == None or height == None:
+            self.tparray = None
+        else:
+            self.tparray = TPArray(width,height)
         
         # Check if file exists
         if os.path.isfile(hdf5_path) == True:
@@ -66,19 +71,16 @@ class hdf5_mgr():
         
         hdf5_file.close()
         
-        # Create a DataFrame which will be the index of all measurements
-        # in the file
         if is_empty:
-            
-            
-            columns = ['Ta','To','device','address','BCC','LuT','blind',
-                       'mean','diff']
-            
-            df_index = pd.DataFrame(data = [],
-                                    columns = columns)
-            
-            df_index.to_hdf(hdf5_path, 'index')
+            self._initialize_index()
+        
     
+    def _initialize_index(self):
+    
+            df_index = pd.DataFrame(data = [])
+            df_index.to_hdf(self._hdf5_path, 'index')
+    
+
     def import_LuT(self,lut_path,device,**kwargs):
         """
         Import a Look up table to the hdf5-file that can be used to calculate

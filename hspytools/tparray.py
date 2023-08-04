@@ -51,6 +51,16 @@ class TPArray():
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
             
+        elif (width,height) == (80,64):
+            DevConst['VDDaddr']=6400
+            DevConst['TAaddr']=6401
+            DevConst['PTaddr']=6402
+            DevConst['ATCaddr']=0
+            DevConst['NROFBLOCKS']=4
+            DevConst['NROFPTAT']=2
+            
+            
+            
         elif (width,height) == (120,84):
             DevConst['VDDaddr']=11760
             DevConst['TAaddr']=11761
@@ -76,7 +86,10 @@ class TPArray():
             DevConst['NROFPTAT']=2
             
         self._DevConst = DevConst
+        self._width = width
+        self._height = height
         self._size = (width,height)
+        self._npsize = (height,width)
         
         self._rowsPerBlock = int(height/DevConst['NROFBLOCKS'] / 2)
         self._pixelPerBlock = int(self._rowsPerBlock * width)
@@ -153,6 +166,7 @@ class TPArray():
             ee['adr_thGrad'][0] = 116
             ee['adr_thOff'][0] = 244
             ee['adr_pij'][0] = 372
+            
         elif (width,height) == (80,64):
             ee['adr_vddCompGrad'][0] = 128
             ee['adr_vddCompOff'][0] = 288
