@@ -10,9 +10,8 @@ import numpy as np
 from pathlib import Path
 import matplotlib
 # import imageio_ffmpeg
-import imageio
 
-import cv2
+
 
 # import matplotlib.pyplot as plt
 # from scipy.interpolate import LinearNDInterpolator as lNDI
@@ -275,82 +274,82 @@ class HTPAdGUI_FileReader():
         
         return None
 
-    def export_avi(self,df_video,video_name,path,**kwargs):
-        """
-        A function for writing a video sequence given as a DataFrame to .avi
-        in a sepcified folder (path)
+    # def export_avi(self,df_video,video_name,path,**kwargs):
+    #     """
+    #     A function for writing a video sequence given as a DataFrame to .avi
+    #     in a sepcified folder (path)
         
 
-        Parameters
-        ----------
-        df_video : pd.DataFrame
-            DESCRIPTION.
+    #     Parameters
+    #     ----------
+    #     df_video : pd.DataFrame
+    #         DESCRIPTION.
 
-        Returns
-        -------
-        None.
+    #     Returns
+    #     -------
+    #     None.
 
-        """        
+    #     """        
 
-        # Framerate
-        fps = kwargs.pop('fps',8)
+    #     # Framerate
+    #     fps = kwargs.pop('fps',8)
         
-        # Get shape of sensor array
-        size = self.tparray._size
-        npsize = self.tparray._npsize
+    #     # Get shape of sensor array
+    #     size = self.tparray._size
+    #     npsize = self.tparray._npsize
         
-        # Get columns with pixel values
-        pix_cols = self.tparray._pix
+    #     # Get columns with pixel values
+    #     pix_cols = self.tparray._pix
         
-        # Get rid of everything else
-        df_video = df_video[pix_cols]
+    #     # Get rid of everything else
+    #     df_video = df_video[pix_cols]
         
-        if not path.exists():
-            path.mkdir(parents=True,exist_ok=False)
+    #     if not path.exists():
+    #         path.mkdir(parents=True,exist_ok=False)
         
-        # Initialize video writer
-        writer = imageio.get_writer((path / (video_name + '.avi')).as_posix(),
-                                    fps=fps,
-                                    macro_block_size=1)
+    #     # Initialize video writer
+    #     writer = imageio.get_writer((path / (video_name + '.avi')).as_posix(),
+    #                                 fps=fps,
+    #                                 macro_block_size=1)
         
-        # codec = cv2.VideoWriter_fourcc(*'MJPG')
-        # codec = cv2.VideoWriter_fourcc(*'H264')
+    #     # codec = cv2.VideoWriter_fourcc(*'MJPG')
+    #     # codec = cv2.VideoWriter_fourcc(*'H264')
         
-        # video = cv2.VideoWriter((path / (video_name + '.avi')).as_posix(),
-        #                         codec,
-        #                         fs,
-        #                         size,
-        #                         isColor = True)  
+    #     # video = cv2.VideoWriter((path / (video_name + '.avi')).as_posix(),
+    #     #                         codec,
+    #     #                         fs,
+    #     #                         size,
+    #     #                         isColor = True)  
                 
-        # Get colormap
-        cmap = matplotlib.cm.get_cmap('plasma')      
+    #     # Get colormap
+    #     cmap = matplotlib.cm.get_cmap('plasma')      
         
-        # Loop over all frames and write to mp4
-        for i in df_video.index:
+    #     # Loop over all frames and write to mp4
+    #     for i in df_video.index:
             
-            img = df_video.loc[i].values.reshape(npsize)
+    #         img = df_video.loc[i].values.reshape(npsize)
             
-            # Normalization 
-            img = ( img - img.min() ) / (img.max() - img.min())
+    #         # Normalization 
+    #         img = ( img - img.min() ) / (img.max() - img.min())
             
-            # Apply colormap
-            RGBA = (cmap(img)*255).astype('uint8')
+    #         # Apply colormap
+    #         RGBA = (cmap(img)*255).astype('uint8')
             
-            # opencv
-            # BGR = cv2.cvtColor(RGBA, cv2.COLOR_RGB2BGR)
-            # video.write(BGR)
+    #         # opencv
+    #         # BGR = cv2.cvtColor(RGBA, cv2.COLOR_RGB2BGR)
+    #         # video.write(BGR)
             
-            # imageio_ffmpeg
-            writer.append_data(RGBA)
+    #         # imageio_ffmpeg
+    #         writer.append_data(RGBA)
 
-        # opencv
-        # cv2.destroyAllWindows()
-        # video.release()
+    #     # opencv
+    #     # cv2.destroyAllWindows()
+    #     # video.release()
         
-        # imageio_ffmpeg
-        writer.close()
+    #     # imageio_ffmpeg
+    #     writer.close()
        
-        return None   
+    #     return None   
     
     def _scale_img(self,img):
         
