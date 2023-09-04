@@ -26,6 +26,8 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=1
             DevConst['NROFPTAT']=1
+            self._fs = 160
+            self._NETD = 100
             
         elif (width,height) == (16,16):
             DevConst['VDDaddr']=384
@@ -34,6 +36,8 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=2
             DevConst['NROFPTAT']=2
+            self._fs = 70
+            self._NETD = 130
         
         elif (width,height) == (32,32):
             DevConst['VDDaddr']=1280
@@ -42,6 +46,8 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
+            self._fs = 27
+            self._NETD = 140
             
         elif (width,height) == (80,64):
             DevConst['VDDaddr']=6400
@@ -50,17 +56,10 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
-            
-        elif (width,height) == (80,64):
-            DevConst['VDDaddr']=6400
-            DevConst['TAaddr']=6401
-            DevConst['PTaddr']=6402
-            DevConst['ATCaddr']=0
-            DevConst['NROFBLOCKS']=4
-            DevConst['NROFPTAT']=2
-            
-            
-            
+            self._fs = 41
+            self._NETD = 90 
+            self._NETD = 70
+                      
         elif (width,height) == (120,84):
             DevConst['VDDaddr']=11760
             DevConst['TAaddr']=11761
@@ -68,6 +67,8 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=6
             DevConst['NROFPTAT']=2
+            self._fs = 28
+            self._NETD = 130
             
         elif (width,height) == (60,40):
             DevConst['VDDaddr']=2880
@@ -76,6 +77,7 @@ class TPArray():
             DevConst['ATCaddr']=2892
             DevConst['NROFBLOCKS']=5
             DevConst['NROFPTAT']=2
+            self._fs = 47
 
         elif (width,height) == (60,84):
             DevConst['VDDaddr']=5760
@@ -84,6 +86,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=7
             DevConst['NROFPTAT']=2
+            self._fs = 25
+            self._NETD = 110
+            
             
         self._DevConst = DevConst
         self._width = width

@@ -8,7 +8,14 @@ Created on Thu May 25 09:15:16 2023
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from scipy.interpolate import LinearNDInterpolator as lNDI
+import matplotlib
+# import imageio_ffmpeg
+import imageio
+
+import cv2
+
+# import matplotlib.pyplot as plt
+# from scipy.interpolate import LinearNDInterpolator as lNDI
 
 from .tparray import TPArray
 
@@ -86,17 +93,27 @@ class HTPAdGUI_FileReader():
         
         with open(bds_path, "rb") as f:
             
-            # Skip header, i.e. first 32 bytes
-            header = f.read(31)
+            # Read the header byte by byte until '\n'
+            header = []
+            header_end = False
             
+            while header_end == False:
+                header.append(f.read(1))
+
+                if header[-1].decode()=='\n':
+                    header_end = True
+            
+            # Join bytes of header together
+            header = bytes().join(header)
+
+                
             # Read two bytes at a time 
             while (LSb := f.read(2)):
                 
                 # and combine in LSb fashion
                 bds_content.append(int.from_bytes(LSb, 
                                                   byteorder='little'))
-                
-        
+               
         # Cast the data to a DataFrame of appropriate size
         columns = self.tparray.get_serial_data_order()
         
@@ -214,6 +231,150 @@ class HTPAdGUI_FileReader():
             [bds_file.write(b) for b in bds_content]
             
         return None
+    
+    def export_png(self,df_video,path):
+        """
+        A function for writing a video sequence given as a DataFrame to .png
+        frame by frame in a sepcified folder (path)
+        
+
+        Parameters
+        ----------
+        df_video : pd.DataFrame
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Get shape of sensor array
+        npsize = self.tparray._npsize
+        
+        # Get columns with pixel values
+        pix_cols = self.tparray._pix
+        
+        # Get rid of everything else
+        df_video = df_video[pix_cols]
+        
+       
+       
+        if not path.exists():
+            path.mkdir(parents=True,exist_ok=False)
+        
+        for i in df_video.index:
+            img = df_video.loc[i].values.reshape(npsize)
+
+            
+            file_name = str(i) + '.png'
+            
+            img = self._scale_img(img)
+
+            matplotlib.image.imsave(path / file_name, img)
+        
+        return None
+
+    def export_avi(self,df_video,video_name,path,**kwargs):
+        """
+        A function for writing a video sequence given as a DataFrame to .avi
+        in a sepcified folder (path)
+        
+
+        Parameters
+        ----------
+        df_video : pd.DataFrame
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """        
+
+        # Framerate
+        fps = kwargs.pop('fps',8)
+        
+        # Get shape of sensor array
+        size = self.tparray._size
+        npsize = self.tparray._npsize
+        
+        # Get columns with pixel values
+        pix_cols = self.tparray._pix
+        
+        # Get rid of everything else
+        df_video = df_video[pix_cols]
+        
+        if not path.exists():
+            path.mkdir(parents=True,exist_ok=False)
+        
+        # Initialize video writer
+        writer = imageio.get_writer((path / (video_name + '.avi')).as_posix(),
+                                    fps=fps,
+                                    macro_block_size=1)
+        
+        # codec = cv2.VideoWriter_fourcc(*'MJPG')
+        # codec = cv2.VideoWriter_fourcc(*'H264')
+        
+        # video = cv2.VideoWriter((path / (video_name + '.avi')).as_posix(),
+        #                         codec,
+        #                         fs,
+        #                         size,
+        #                         isColor = True)  
+                
+        # Get colormap
+        cmap = matplotlib.cm.get_cmap('plasma')      
+        
+        # Loop over all frames and write to mp4
+        for i in df_video.index:
+            
+            img = df_video.loc[i].values.reshape(npsize)
+            
+            # Normalization 
+            img = ( img - img.min() ) / (img.max() - img.min())
+            
+            # Apply colormap
+            RGBA = (cmap(img)*255).astype('uint8')
+            
+            # opencv
+            # BGR = cv2.cvtColor(RGBA, cv2.COLOR_RGB2BGR)
+            # video.write(BGR)
+            
+            # imageio_ffmpeg
+            writer.append_data(RGBA)
+
+        # opencv
+        # cv2.destroyAllWindows()
+        # video.release()
+        
+        # imageio_ffmpeg
+        writer.close()
+       
+        return None   
+    
+    def _scale_img(self,img):
+        
+        # Get width an height of image
+        w = self.tparray._width
+        h = self.tparray._height
+        
+        # Crop image by 10 % circumferential
+        crop_w = int(np.ceil(0.1*w))
+        crop_h = int(np.ceil(0.1*h))
+        
+        # Crop the image by 3 pixels to get rid of corners.
+        img_crop = img[crop_h:h-crop_h,crop_w:w-crop_w]
+        
+        # Use the pixel values in the cropped frame to scale the image
+        dK_max  = img_crop.max()
+        dK_min  = img_crop.min()
+        
+        img = ( img - dK_min ) / (dK_max - dK_min)
+        
+        img[img<=0] = 0
+
+
+        return img
     
     def _flip(self,df_video):
 

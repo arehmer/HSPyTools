@@ -17,6 +17,12 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from scipy import ndimage
+
+from sklearn.cluster import AgglomerativeClustering
+
+from scipy.cluster.hierarchy import dendrogram, linkage
+
+from hspytools.cv.filters import Convolution
     
 class Seg():
     
@@ -228,7 +234,103 @@ class RegionSeg(Seg):
         
         return img_seg
 
+
+
+class OtsuSeg(Seg):
+    
+    def __init__(self,w,h,**kwargs):
         
+        super(OtsuSeg,self).__init__(w,h)
+        
+        
+        self.w = w
+        self.h = h
+        
+        distance_threshold = kwargs.pop('distance_threshold',50)
+        
+        self.foreground_lim = kwargs.pop('foreground_lim',0.3)
+        
+        
+        # self.agg_clust = AgglomerativeClustering(n_clusters=None,
+        #                                          distance_threshold = distance_threshold,
+        #                                          affinity = 'euclidean',
+        #                                          linkage = 'ward' )
+        
+        self.agg_clust = AgglomerativeClustering(n_clusters=None,
+                                                 distance_threshold = 2,
+                                                 affinity = 'manhattan',
+                                                 linkage = 'single' )
+        
+        self.kernel_size =  kwargs.pop('conv_filter_size',3)
+        
+        # Initialize the convolution filter
+        kernel = np.zeros((self.kernel_size,self.kernel_size))
+        kernel[self.kernel_size%2,:] = 1
+        kernel[:,self.kernel_size%2] = 1
+        kernel[self.kernel_size%2,self.kernel_size%2] = 0
+        
+        self.conv_filter = Convolution(mode='same')
+        self.conv_filter.k = kernel
+        
+        
+    def segment(self,img,**kwargs):
+        
+        # Perform Otsu thresholding on image as many times as specified to
+        # obtain the image foreground
+        img_seg = img.copy()
+        
+        foreground_ratio = 1
+        
+        while foreground_ratio > self.foreground_lim:
+            
+            _,img_seg = otsu_thresholding(img_seg)
+            foreground_ratio = np.sum(~np.isnan(img_seg)) / (self.w*self.h)
+            # print(foreground_ratio)
+            # plt.figure()
+            # plt.imshow(img_seg)
+        
+        # Replace al NaN with zeros or convolution doesn't work
+        img_seg[np.isnan(img_seg)] = 0
+        
+        # Set all pixels in foreground to 1
+        img_seg[img_seg>0] = 1 
+        
+        # Perform a convolution to get rid of lonely pixels in the foreground
+        # that crossed threshold only by chance
+        img_seg = self.conv_filter.convolve(img_seg)
+        
+        # Set all pixels with less than 2 neighbors to zero
+        img_seg[img_seg<2] = 0
+        
+        # Get x- and y- coordinates of all nonzero pixels
+        pix_y, pix_x = np.where(img_seg!=0)
+        pix_xy = np.vstack([pix_x,pix_y]).T 
+        
+        # Perform agglomorative cluster to aggregate neigbouring pixels
+        # to one large cluster
+        self.agg_clust.fit(pix_xy)
+        
+        # Dendrogram for debugging
+        # Z = linkage(pix_xy)
+        # plt.figure()
+        # dendrogram(Z)  
+            
+        # Get cluster of pixels
+        clust_labels = self.agg_clust.labels_   
+        
+        # Cluster labels start at zero, change that by addition with 1
+        clust_labels = clust_labels + 1 
+        
+        # Assign cluster labels to pixels in image
+        img_seg[pix_y,pix_x] = clust_labels
+                
+        # Save image and segmented image as attributes
+        self.img = img
+        self.img_seg = img_seg
+        
+        return img_seg,clust_labels
+        
+    
 def dist_from_center(img):
     
     data = []
@@ -327,7 +429,6 @@ def hierarch_clust(img,**kwargs):
     return df,df_stat
     
 
-
 def otsu_thresholding(img):
     
     def compute_otsu_criteria(im, th):
@@ -341,7 +442,8 @@ def otsu_thresholding(img):
         weight1 = nb_pixels1 / nb_pixels
         weight0 = 1 - weight1
 
-        # if one of the classes is empty, eg all pixels are below or above the threshold, that threshold will not be considered
+        # if one of the classes is empty, eg all pixels are below or above the
+        # threshold, that threshold will not be considered
         # in the search for the best threshold
         if weight1 == 0 or weight0 == 0:
             return np.inf
@@ -361,11 +463,14 @@ def otsu_thresholding(img):
         offset = abs(np.min(img))
     else:
         offset = 0
-
+    
+    # Add offset to make everyting greater equal zero
     img_off = img + offset
     
+    # Consider only non nan values 
+    img_off = img_off[~np.isnan(img_off)].flatten()
     # testing all thresholds from 0 to the maximum of the image
-    threshold_range = range(int(np.max(img_off))+1)
+    threshold_range = range(int(np.nanmax(img_off))+1)
     criterias = [compute_otsu_criteria(img_off, th) for th in threshold_range]
     
     # best threshold is the one minimizing the Otsu criteria
@@ -375,8 +480,8 @@ def otsu_thresholding(img):
     best_threshold = best_threshold - offset
     
     # Threshold image
-    img_below = img.copy()
-    img_above = img.copy()
+    img_below = img.copy().astype(float)
+    img_above = img.copy().astype(float)
     img_below[img_below>best_threshold] = np.nan
     img_above[img_above<best_threshold] = np.nan
     

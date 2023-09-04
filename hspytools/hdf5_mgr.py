@@ -11,6 +11,7 @@ import numpy as np
 import warnings
 import os
 
+from hspytools.helpers import HTPAdGUI_FileReader
 
 class hdf5_mgr():
 
@@ -424,69 +425,122 @@ class hdf5_mgr():
     #     video.release()
        
     #     return None
+
+    def video_to_avi(self,unique_id,**kwargs):
+        """
+        Writes a video sequence already stored in the hdf5-file under the name
+        video_name to an mp4-file. Video will be saved in the folder specified 
+        in folder_path under the file name <video_name>.mp4
+        
+        Parameters
+        ----------
+        video_name : str
+            name under which the video is stored in the hdf5-file. If a 
+            postprocessed version of the video is to be addressed, then pass
+            'video_name/filtered' for example, or 'video_name/gradient'
+        folder_path : str
+            Path to the folder where the video should be saved. 
+
+            
+        Returns
+        -------
+        None.
+        """
+        
+        print('''For annotation purposes it is highly recommended to export the 
+              video sequence as png-images via write_to_png(). mp4 performs
+              interpolations between frames that to not reflect the original
+              sensor image and can deaviate from it.''')
+        
+        fs = kwargs.pop('fs',8)
+        appendix = kwargs.pop('appendix','')
+        
+        
+        # appendix = kwargs.pop('appendix','')
+        
+        # Convert device to list
+        if not isinstance(unique_id,list):
+            unique_id = [unique_id]
+        
+        # Load index of hdf5 file
+        index = self.load_index()
+        
+        for u_id in unique_id:
+            
+            # Get address
+            a = index.loc[u_id,'address']
+            
+            # Load specified video sequence
+            df_video = self.load_df(a+'/data')
+            
+            # Get size information
+            (w,h) = (index.loc[u_id,'Width'],index.loc[u_id,'Height'])
+            
+            # Initialize a HTPAdGUI_FileReader, which has a function for 
+            # writing DataFrames of video to .png
+            reader = HTPAdGUI_FileReader(w,h)
+            
+            # Pass the DataFrame to the method for writing to .png
+            path = Path.cwd() /  (a+'/avi')
+            video_name = a.split('/')[-1]
+            reader.export_avi(df_video,video_name,path)
+            
+        return None
+        
+  
     
-    
-    # def write_to_png(self,video_name,folder_path,**kwargs):
-    #     """
-    #     Writes a video sequence already stored in the hdf5-file under the name
-    #     video_name to png-images frame by frame. The files will be saved 
-    #     in a folder with the name <video_name> in the folder specified in
-    #     folder_path. The png-files will be named according to their frame 
-    #     number.
+    def video_to_png(self,unique_id,**kwargs):
+        """
+        Writes a video sequence already stored in the hdf5-file under the name
+        video_name to png-images frame by frame. The files will be saved 
+        in a folder with the name <video_name> in the folder specified in
+        folder_path. The png-files will be named according to their frame 
+        number.
         
-    #     Parameters
-    #     ----------
-    #     video_name : str
-    #         name under which the video is stored in the hdf5-file. If a 
-    #         postprocessed version of the video is to be addressed, then pass
-    #         'video_name/filtered' for example, or 'video_name/gradient'
-    #     folder_path : str
-    #         Path to the folder where the video should be saved. 
+        Parameters
+        ----------
+        video_name : str
+            name under which the video is stored in the hdf5-file. If a 
+            postprocessed version of the video is to be addressed, then pass
+            'video_name/filtered' for example, or 'video_name/gradient'
+        folder_path : str
+            Path to the folder where the video should be saved. 
 
             
-    #     Returns
-    #     -------
-    #     None.
-    #     """
+        Returns
+        -------
+        None.
+        """
         
 
-    #     appendix = kwargs.pop('appendix','')
+        # appendix = kwargs.pop('appendix','')
         
-    #     address = 'videos/' + video_name
-
-    #     # Load specified video sequence
-    #     df_video = pd.read_hdf(self._hdf5_path, address + '/data' + appendix)
+        # Convert device to list
+        if not isinstance(unique_id,list):
+            unique_id = [unique_id]
         
-    #     # Load size information
-    #     (w,h) = self.load_size(video_name)
-
-    #     # For writing to an image, only pixel values are needed
-    #     pixel_cols = df_video.columns[0:w*h]
-    #     df_video = df_video[pixel_cols]
+        # Load index of hdf5 file
+        index = self.load_index()
         
-    #     # Look up maximum and minimum for scaling
-    #     dK_max  = df_video.max().max()
-    #     dK_min  = df_video.min().min()
-        
-    #     # Create folder in path with name of video
-    #     video_name = video_name.replace('/','_')
-        
-    #     save_path = folder_path + '/' + video_name
-        
-    #     if not os.path.exists(save_path):
-    #         os.makedirs(save_path)
-        
-    #     for i in df_video.index:
-    #         img = df_video.loc[i].values.reshape((h,w))
+        for u_id in unique_id:
             
-    #         # file_name = video_name + '_' + str(i) + '.png'
+               
+            # Get address
+            a = index.loc[u_id,'address']
             
-    #         file_name = str(i) + '.png'
+            # Load specified video sequence
+            df_video = self.load_df(a+'/data')
             
-    #         img = ( img - dK_min ) / (dK_max - dK_min)
+            # Get size information
+            (w,h) = (index.loc[u_id,'Width'],index.loc[u_id,'Height'])
             
-    #         # scipy.misc.toimage(img, cmin=0, cmax=1).save(folder_path + '/' \
-    #         #                                                + file_name)
-    #         matplotlib.image.imsave(save_path + '/' + file_name, img)
-    #     return None
+            # Initialize a HTPAdGUI_FileReader, which has a function for 
+            # writing DataFrames of video to .png
+            reader = HTPAdGUI_FileReader(w,h)
+            
+            # Pass the DataFrame to the method for writing to .png
+            path = Path.cwd() /  (a+'/png')
+            reader.export_png(df_video,path)
+            
+        return path
     
