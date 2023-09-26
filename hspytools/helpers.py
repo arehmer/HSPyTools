@@ -49,11 +49,6 @@ class HTPAdGUI_FileReader():
             print('File extension not recognized.')
             return None
         
-        # print("""Pixel array is flipped vertically otherwise mirrored
-        #       image is displayed""")
-              
-        # df_video = self._flip(df_video)
-        
         return df_video, header
     
     def _import_txt(self,path,**kwargs):
@@ -78,7 +73,7 @@ class HTPAdGUI_FileReader():
         txt_content.columns = columns
 
         # rename index appropriately
-        txt_content.index = range(1,len(txt_content)+1)
+        txt_content.index = range(0,len(txt_content))
         txt_content.index.name = 'image_id'
         
         header = None
@@ -124,7 +119,7 @@ class HTPAdGUI_FileReader():
         bds_content = pd.DataFrame(data=bds_content,
                                    columns = columns)
         
-        bds_content.index = range(1,len(bds_content)+1)
+        bds_content.index = range(len(bds_content))
         bds_content.index.name = 'image_id'
         
         return bds_content, header
@@ -259,6 +254,7 @@ class HTPAdGUI_FileReader():
         
        
        
+       
         if not path.exists():
             path.mkdir(parents=True,exist_ok=False)
         
@@ -380,7 +376,7 @@ class HTPAdGUI_FileReader():
         w = self.width
         h = self.height
         
-        pix_cols = df_video.columns[0:w*h]
+        pix_cols = self.tparray._pix
         
         for i in df_video.index:
             img = df_video.loc[i,pix_cols].values.reshape((h,w))

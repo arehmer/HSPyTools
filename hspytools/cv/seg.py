@@ -16,6 +16,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+
 from scipy import ndimage
 
 from sklearn.cluster import AgglomerativeClustering
@@ -23,6 +24,7 @@ from sklearn.cluster import AgglomerativeClustering
 from scipy.cluster.hierarchy import dendrogram, linkage
 
 from hspytools.cv.filters import Convolution
+from hspytools.cv.thresh import Otsu
     
 class Seg():
     
@@ -30,6 +32,58 @@ class Seg():
         
         self.w = w
         self.h = h
+    
+    def bboxes_from_clust(self,pix_coords,clust_dict):
+        """
+        
+        Parameters
+        ----------
+        pix_coords : array 
+            Nx2 array with coordinates of pixels. First column is x-coordinate,
+            second column y coordinate
+        clust_dict : dict
+            Dictionary with structure {cluster_label(int):list/array of indices
+                                       of pixels in pix_coords}
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Initialize empty DataFrame
+        columns = ['xtl','ytl','xbr','ybr','fill_ratio']
+        bboxes = pd.DataFrame(data=[],
+                              columns = columns)    
+        
+        pix_frame = self.pix_frame
+        
+        for c in clust_dict.keys():
+            
+            # Get coordinates of all pixels belonging to that cluster
+            clust_pix_coords = pix_coords[clust_dict[c],:]
+            
+            # get the upper left and lower right corner
+            x_min,y_min =  clust_pix_coords.min(axis=0)
+            x_max,y_max =  clust_pix_coords.max(axis=0)+1
+            
+            # Add a frame if desired
+            x_min = max(0,x_min-pix_frame)
+            y_min = max(0,y_min-pix_frame)
+            x_max = min(self.w,x_max+pix_frame)
+            y_max = min(self.h,y_max+pix_frame)
+            
+            # Calculate to what extent the area box is filled
+            fill_ratio = clust_pix_coords.shape[0] / \
+                ((y_max - y_min) * (x_max-x_min))
+            
+            
+            # Write to dataframe
+            bboxes.loc[c] = [x_min,y_min,x_max,y_max,fill_ratio] 
+            
+        return bboxes
+            
+        
         
     def write_to_png(self,title,file_name):
         """
@@ -241,12 +295,7 @@ class OtsuSeg(Seg):
     def __init__(self,w,h,**kwargs):
         
         super(OtsuSeg,self).__init__(w,h)
-        
-        
-        self.w = w
-        self.h = h
-        
-        distance_threshold = kwargs.pop('distance_threshold',50)
+
         
         self.foreground_lim = kwargs.pop('foreground_lim',0.3)
         
@@ -283,7 +332,7 @@ class OtsuSeg(Seg):
         
         while foreground_ratio > self.foreground_lim:
             
-            _,img_seg = otsu_thresholding(img_seg)
+            _,img_seg = Otsu().otsu_thresholding(img_seg)
             foreground_ratio = np.sum(~np.isnan(img_seg)) / (self.w*self.h)
             # print(foreground_ratio)
             # plt.figure()
@@ -429,60 +478,159 @@ def hierarch_clust(img,**kwargs):
     return df,df_stat
     
 
-def otsu_thresholding(img):
-    
-    def compute_otsu_criteria(im, th):
-        # create the thresholded image
-        thresholded_im = np.zeros(im.shape)
-        thresholded_im[im >= th] = 1
 
-        # compute weights
-        nb_pixels = im.size
-        nb_pixels1 = np.count_nonzero(thresholded_im)
-        weight1 = nb_pixels1 / nb_pixels
-        weight0 = 1 - weight1
 
-        # if one of the classes is empty, eg all pixels are below or above the
-        # threshold, that threshold will not be considered
-        # in the search for the best threshold
-        if weight1 == 0 or weight0 == 0:
-            return np.inf
+class SelectiveSearch(Seg):
+    
+    def __init__(self,w,h,**kwargs):
+        
+        super(SelectiveSearch,self).__init__(w,h)
+    
+        self.hierarch_clust = linkage
+        
+        
+        self.pix_frame = kwargs.pop('pix_frame',1)
+        self.bbox_lim = kwargs.pop('bbox_lim',(0,np.inf))
+        
+        self.q = kwargs.pop('q',None)
+        
+    def _distance_metric(self,X):
+        """
+        Pairwise distances between observations in n-dimensional space
+        """
+        pass
+        
+        
+    
+    def get_proposals(self,video):
+        
+        bbox_annnot = []
+        
+        for i in video.index:
+            # Convert row from DataFrame to array
+            frame = video.loc[i].values.reshape((self.h,self.w))
+            
+            # Get bounding boxes
+            bbox_frame = self.segment_frame(frame)
+            
+            # Add a column for the image id
+            bbox_frame['image_id'] = i
+            
+            bbox_annnot.append(bbox_frame)
+        
+        # Concatenate to one large DataFrame
+        bbox_annnot = pd.concat(bbox_annnot)
+        
+        # Reindex so index is unique
+        bbox_annnot = bbox_annnot.reset_index(drop=True)
+        
+        # Name index "id" for compatiblity with all other classes
+        bbox_annnot.index.rename('id',inplace=True)
+            
+        return bbox_annnot
+        
+        
+    def segment_frame(self,img):
+        
+        y_coords,x_coords = np.where(~np.isnan(img)) 
+        xy_coords = np.vstack((x_coords,y_coords)).T
+        
+        # Get pixels and their coordinates
+        # xy_coords = xy_coords[idx_sel,:]
+        pix = img[xy_coords[:,1],xy_coords[:,0]].reshape((-1,1))
+        
+        # Perform noisy! otsu thresholding here
+        _,above_thresh = Otsu(q=self.q).otsu_thresholding(pix)
+        # _,above_thresh = OtsuThresholding().otsu_thresholding(above_thresh)
+        
+        # Get only pixels above threshold
+        idx_sel = ~np.isnan(above_thresh)
+        pix = above_thresh[idx_sel].reshape((-1,1))
+        xy_coords = xy_coords[idx_sel.flatten(),:]
+        
+        # plot image for debugging
+        img_debug = np.zeros(img.shape)
+        img_debug[xy_coords[:,1],xy_coords[:,0]] = pix.flatten()
 
-        # find all pixels belonging to each class
-        val_pixels1 = im[thresholded_im == 1]
-        val_pixels0 = im[thresholded_im == 0]
+        # plt.figure()
+        # plt.imshow(img_debug)
+        
+        # Cluster in that space
+        feat_space = np.hstack((pix,xy_coords))
+        # feat_space = xy_coords
+        
+        Z = self.hierarch_clust(feat_space,method='weighted') 
+        
+        # Get cluster labels for leaf pixels on all scales within the specified
+        # cluster size self.clust_lim
+        clust_dict = self._cluster_from_linkage(Z)
+        
+        
+        # Extract Bounding Boxes for all clusters that are within a specified
+        # range regarding the number of pixels they contain
+        bboxes = self.bboxes_from_clust(xy_coords, clust_dict)
+        
+        # Cast columns with corners to integers
+        bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
+        'ybr':int})
+        # test_img = np.ones(img.shape)*2900
+        # test_img[yx_pix[:,0],yx_pix[:,1]] =  pix.flatten()
+        
+        # plt.figure()
+        # plt.imshow(test_img)
+        
+        return bboxes
+        
+    def _cluster_from_linkage(self,Z):
+        """
+        Assigns orginal observations to clusters according to the provided
+        linkage matrix Z
+        
+        Parameters
+        ----------
+        Z : TYPE
+            DESCRIPTION.
 
-        # compute variance of these classes
-        var1 = np.var(val_pixels1) if len(val_pixels1) > 0 else 0
-        var0 = np.var(val_pixels0) if len(val_pixels0) > 0 else 0
+        Returns
+        -------
+        None.
+        """
 
-        return weight0 * var0 + weight1 * var1
-    
-    # Otsu thresholding only works for positive pixel intensities
-    if np.min(img) < 0:
-        offset = abs(np.min(img))
-    else:
-        offset = 0
-    
-    # Add offset to make everyting greater equal zero
-    img_off = img + offset
-    
-    # Consider only non nan values 
-    img_off = img_off[~np.isnan(img_off)].flatten()
-    # testing all thresholds from 0 to the maximum of the image
-    threshold_range = range(int(np.nanmax(img_off))+1)
-    criterias = [compute_otsu_criteria(img_off, th) for th in threshold_range]
-    
-    # best threshold is the one minimizing the Otsu criteria
-    best_threshold = threshold_range[np.argmin(criterias)]
-    
-    # Compensate for offset
-    best_threshold = best_threshold - offset
-    
-    # Threshold image
-    img_below = img.copy().astype(float)
-    img_above = img.copy().astype(float)
-    img_below[img_below>best_threshold] = np.nan
-    img_above[img_above<best_threshold] = np.nan
-    
-    return img_below,img_above
+        # First find all clusters within the specified size limits
+        clust_idx = np.where((Z[:,3] >= self.bbox_lim[0]) &\
+                             (Z[:,3] <= self.bbox_lim[1]))[0]
+        
+        # The number of original observations is the number of rows in the
+        # linkage matrix + 1
+        N = Z.shape[0]+1
+        # For each of the clusters within the size limits, find all their leaves
+        # i.e. the corresponding pixels
+        
+        
+        clust = {}
+        
+        for c in clust_idx:
+            
+            pix = []
+            branch = []
+            
+            # get the c-th row of the linkage matrix
+            z = Z[c,0:2].astype(int)
+            n = Z[c,3].astype(int)
+            
+            branch.extend(list(z.astype(int)))
+            
+            # propagate down until all leafes have been found
+            for b in branch:
+                if b<N:
+                   pix.append(b) 
+                else:
+                    z = Z[b-N,0:2].astype(int)
+                    branch.extend(list(z.astype(int)))
+                    
+            clust[c] = pix
+            
+        return clust
+            
+                        
+ 

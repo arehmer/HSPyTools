@@ -4,7 +4,7 @@ import numpy as np
 
 from scipy.spatial import distance_matrix
 
-from ..cv.imgseg import OtsuSeg
+from ..cv.seg import OtsuSeg
 
 class OfflineCVAT():
     
