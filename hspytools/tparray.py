@@ -258,6 +258,7 @@ class TPArray():
         
         # reshape to sort EEPROM content as rows of 16 addresses
         if(self._size[0] == 32) and (self._size[1] == 32):
+            bccData = bccData[0:512*16]
             bccData = np.reshape(bccData, (512, 16))
         elif (self._size[0] == 60) and (self._size[1] == 84):
             bccData = np.reshape(bccData, (2048, 16))

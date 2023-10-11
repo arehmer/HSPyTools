@@ -150,29 +150,37 @@ class Seg():
         if  dT >= 5:
             img_thresh = img_above  
         else:
-            # In this case the algorithm does not work robustly
-            # ask user to decide
-            fig,ax = plt.subplots(1,2)
-            ax[0].imshow(img_below)
-            ax[0].set_title('below threshold')
-            ax[1].imshow(img_above)
-            ax[1].set_title('above threshold')
-            fig.show()
-            plt.pause(10E-3)
             
-            print("""User input needed. Choose which image represents the 
-                  object.""")
-            choice = input("""Enter 'b' for the image below the threshold 
-                           or 'a' for the image above the threshold:   """)            
+            foreground_picked = False
             
-            plt.close(fig)
+            while foreground_picked == False:
             
-            if choice == 'b':
-                img_thresh = img_below
-            elif choice == 'a':
-                img_thresh = img_above
+                # In this case the algorithm does not work robustly
+                # ask user to decide
+                fig,ax = plt.subplots(1,2)
+                ax[0].imshow(img_below)
+                ax[0].set_title('below threshold')
+                ax[1].imshow(img_above)
+                ax[1].set_title('above threshold')
+                fig.show()
+                plt.pause(10E-2)
                 
-            return img_thresh
+                print("""User input needed. Choose which image represents the 
+                      object.""")
+                choice = input("""Enter 'b' for the image below the threshold 
+                               or 'a' for the image above the threshold:   """)            
+                
+                plt.close(fig)
+                
+                if choice == 'b':
+                    img_thresh = img_below
+                    foreground_picked = True
+                    
+                elif choice == 'a':
+                    img_thresh = img_above
+                    foreground_picked = True
+                
+        return img_thresh
         
 
 
@@ -254,7 +262,7 @@ class RegionSeg(Seg):
         img_crop = img[3:self.h-3,3:self.w-3]
         
         # Threshold image
-        img_below, img_above= otsu_thresholding(img_crop)
+        img_below, img_above= Otsu().otsu_thresholding(img_crop)
         
         # Depending on difference between ambient and object temperature 
         # the object appears below or above the threshold in the image
