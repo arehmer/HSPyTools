@@ -32,6 +32,7 @@ class Seg():
         
         self.w = w
         self.h = h
+        self.pix_frame = kwargs.pop('pix_frame',1)
     
     def bboxes_from_clust(self,pix_coords,clust_dict):
         """
@@ -492,22 +493,21 @@ class SelectiveSearch(Seg):
     
     def __init__(self,w,h,**kwargs):
         
-        super(SelectiveSearch,self).__init__(w,h)
-    
-        self.hierarch_clust = linkage
-        
-        
-        self.pix_frame = kwargs.pop('pix_frame',1)
+
         self.bbox_lim = kwargs.pop('bbox_lim',(0,np.inf))
-        
         self.q = kwargs.pop('q',None)
+        self.hierarch_clust = linkage
+        self.linkage_method = kwargs.pop('linkage_method','weighted')
+        self.linkage_metric = kwargs.pop('linkage_metric','weighted')
+        
+        super(SelectiveSearch,self).__init__(w,h,**kwargs)
+    
         
     def _distance_metric(self,X):
         """
         Pairwise distances between observations in n-dimensional space
         """
         pass
-        
         
     
     def get_proposals(self,video):
@@ -567,7 +567,8 @@ class SelectiveSearch(Seg):
         feat_space = np.hstack((pix,xy_coords))
         # feat_space = xy_coords
         
-        Z = self.hierarch_clust(feat_space,method='weighted') 
+        Z = self.hierarch_clust(feat_space,
+                                method=self.linkage_method) 
         
         # Get cluster labels for leaf pixels on all scales within the specified
         # cluster size self.clust_lim
@@ -624,7 +625,6 @@ class SelectiveSearch(Seg):
             
             # get the c-th row of the linkage matrix
             z = Z[c,0:2].astype(int)
-            n = Z[c,3].astype(int)
             
             branch.extend(list(z.astype(int)))
             
