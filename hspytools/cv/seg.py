@@ -366,25 +366,30 @@ class OtsuSeg(Seg):
         
         # Perform agglomorative cluster to aggregate neigbouring pixels
         # to one large cluster
-        self.agg_clust.fit(pix_xy)
         
-        # Dendrogram for debugging
-        # Z = linkage(pix_xy)
-        # plt.figure()
-        # dendrogram(Z)  
+        if pix_xy.shape[0]>=2:
+            self.agg_clust.fit(pix_xy)
             
-        # Get cluster of pixels
-        clust_labels = self.agg_clust.labels_   
-        
-        # Cluster labels start at zero, change that by addition with 1
-        clust_labels = clust_labels + 1 
-        
-        # Assign cluster labels to pixels in image
-        img_seg[pix_y,pix_x] = clust_labels
+            # Dendrogram for debugging
+            # Z = linkage(pix_xy)
+            # plt.figure()
+            # dendrogram(Z)  
                 
-        # Save image and segmented image as attributes
-        self.img = img
-        self.img_seg = img_seg
+            # Get cluster of pixels
+            clust_labels = self.agg_clust.labels_   
+            
+            # Cluster labels start at zero, change that by addition with 1
+            clust_labels = clust_labels + 1 
+            
+            # Assign cluster labels to pixels in image
+            img_seg[pix_y,pix_x] = clust_labels
+                    
+            # Save image and segmented image as attributes
+            self.img = img
+            self.img_seg = img_seg
+        else:
+            img_seg = []
+            clust_labels = []
         
         return img_seg,clust_labels
         
