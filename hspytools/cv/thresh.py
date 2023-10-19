@@ -19,6 +19,9 @@ class Otsu():
            value that minimises Otsu's criteria as the threshold, the 
            q-th percentile of all calculated criterias is taken to be the 
            threshold.
+           As a result, pixels that would have fallen under the threshold
+           as background do now pass the lower threshold and are assigned
+           to foreground pixels.
         
         """
                 

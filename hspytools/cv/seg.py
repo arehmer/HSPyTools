@@ -497,11 +497,21 @@ class SelectiveSearch(Seg):
         self.bbox_lim = kwargs.pop('bbox_lim',(0,np.inf))
         self.q = kwargs.pop('q',None)
         self.hierarch_clust = linkage
+        
+        """
+        Linkage documentation
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
+        """
+        
         self.linkage_method = kwargs.pop('linkage_method','weighted')
         self.linkage_metric = kwargs.pop('linkage_metric','weighted')
         
         super(SelectiveSearch,self).__init__(w,h,**kwargs)
-    
+        
+        # Test if segmentation works with ths method-metric combination
+        # Use a random image with uniformly distributed values
+        # between 0 and 4000 dK 
+        self.segment_frame(np.random.rand(h,w)*4*1E3)
         
     def _distance_metric(self,X):
         """
@@ -568,7 +578,8 @@ class SelectiveSearch(Seg):
         # feat_space = xy_coords
         
         Z = self.hierarch_clust(feat_space,
-                                method=self.linkage_method) 
+                                method=self.linkage_method,
+                                metric = self.linkage_metric) 
         
         # Get cluster labels for leaf pixels on all scales within the specified
         # cluster size self.clust_lim
