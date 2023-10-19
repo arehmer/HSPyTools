@@ -25,7 +25,7 @@ class Otsu():
         
         """
                 
-        self.q = kwargs.pop('q',None)
+        self.q = kwargs.pop('q',100)
     
     def otsu_thresholding(self,img):
         
@@ -45,7 +45,7 @@ class Otsu():
                                 int(np.nanmax(img_off))+1)
         criterias = [self._1d_otsu(img_off, th) for th in threshold_range]
         
-        if self.q is None:
+        if self.q == 100:
             # best threshold is the one minimizing the Otsu criteria
             best_threshold = threshold_range[np.argmin(criterias)]
         else:
@@ -54,10 +54,10 @@ class Otsu():
             
             # First get rid of all criteria value above the optimal threshold
             # according to Otsu
-            criterias = criterias[0:np.argmin(criterias)+1]
+            criterias = -criterias[0:np.argmin(criterias)+1]
             
             # Then calculate the q-th percentile
-            percentile = np.percentile(criterias,2*self.q)
+            percentile = np.percentile(criterias,self.q)
             
             # Find the value closest to that percentile and define it as the 
             # threshold
