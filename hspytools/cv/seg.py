@@ -500,7 +500,7 @@ class SelectiveSearch(Seg):
         
 
         self.bbox_lim = kwargs.pop('bbox_lim',(0,np.inf))
-        self.q = kwargs.pop('q',None)
+        self.q = kwargs.pop('q',100)
         self.hierarch_clust = linkage
         
         """
