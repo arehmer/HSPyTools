@@ -82,6 +82,13 @@ class Seg():
             # Write to dataframe
             bboxes.loc[c] = [x_min,y_min,x_max,y_max,fill_ratio] 
             
+        # Sort by fill ration
+        bboxes = bboxes.sort_values('fill_ratio',0,ascending=False)
+        
+        # Delete duplicates
+        idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
+        bboxes = bboxes.loc[~idx_dupl]
+        
         return bboxes
             
         
@@ -504,7 +511,7 @@ class SelectiveSearch(Seg):
         """
         
         self.linkage_method = kwargs.pop('linkage_method','weighted')
-        self.linkage_metric = kwargs.pop('linkage_metric','weighted')
+        self.linkage_metric = kwargs.pop('linkage_metric','euclidean')
         
         super(SelectiveSearch,self).__init__(w,h,**kwargs)
         
