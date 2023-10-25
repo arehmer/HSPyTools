@@ -27,7 +27,7 @@ class Otsu():
                 
         self.q = kwargs.pop('q',100)
     
-    def otsu_thresholding(self,img):
+    def threshold(self,img):
         
         # Otsu thresholding only works for positive pixel intensities
         if np.min(img) < 0:

@@ -83,7 +83,7 @@ class Seg():
             bboxes.loc[c] = [x_min,y_min,x_max,y_max,fill_ratio] 
             
         # Sort by fill ration
-        bboxes = bboxes.sort_values('fill_ratio',0,ascending=False)
+        bboxes = bboxes.sort_values('fill_ratio',axis=0,ascending=False)
         
         # Delete duplicates
         idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
@@ -209,7 +209,7 @@ class ClustSeg(Seg):
         img_crop = img[3:self.h-3,3:self.w-3]
 
         # Threshold image
-        img_below, img_above= otsu_thresholding(img_crop)
+        img_below, img_above= threshold(img_crop)
         
         # Depending on difference between ambient and object temperature 
         # the object appears below or above the threshold in the image
@@ -270,7 +270,7 @@ class RegionSeg(Seg):
         img_crop = img[3:self.h-3,3:self.w-3]
         
         # Threshold image
-        img_below, img_above= Otsu().otsu_thresholding(img_crop)
+        img_below, img_above= Otsu().threshold(img_crop)
         
         # Depending on difference between ambient and object temperature 
         # the object appears below or above the threshold in the image
@@ -348,7 +348,7 @@ class OtsuSeg(Seg):
         
         while foreground_ratio > self.foreground_lim:
             
-            _,img_seg = Otsu().otsu_thresholding(img_seg)
+            _,img_seg = Otsu().threshold(img_seg)
             foreground_ratio = np.sum(~np.isnan(img_seg)) / (self.w*self.h)
             # print(foreground_ratio)
             # plt.figure()
@@ -507,9 +507,9 @@ class SelectiveSearch(Seg):
         
 
         self.bbox_lim = kwargs.pop('bbox_lim',(0,np.inf))
-        self.q = kwargs.pop('q',100)
         self.hierarch_clust = linkage
         
+        self.thresholder = Otsu(**kwargs)
         """
         Linkage documentation
         https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
@@ -569,9 +569,13 @@ class SelectiveSearch(Seg):
         # xy_coords = xy_coords[idx_sel,:]
         pix = img[xy_coords[:,1],xy_coords[:,0]].reshape((-1,1))
         
-        # Perform noisy! otsu thresholding here
-        _,above_thresh = Otsu(q=self.q).otsu_thresholding(pix)
-        # _,above_thresh = OtsuThresholding().otsu_thresholding(above_thresh)
+        # Perform Otsu-Thresholding here
+        below_thresh,above_thresh = self.thresholder.threshold(pix)
+        
+        # plt.figure()
+        # plt.imshow(above_thresh.reshape((40,60)))
+        # Calculate the mean of the background for HOG purposes
+        bg_mean = np.nanmean(below_thresh)
         
         # Get only pixels above threshold
         idx_sel = ~np.isnan(above_thresh)
@@ -588,6 +592,12 @@ class SelectiveSearch(Seg):
         # Cluster in that space
         feat_space = np.hstack((pix,xy_coords))
         # feat_space = xy_coords
+        feat_space = (feat_space - feat_space.min(axis=0)) / \
+            (feat_space.max(axis=0) - feat_space.min(axis=0))
+        # Normalize all values to the same range
+        
+        
+        # feat_space = xy_coords
         
         Z = self.hierarch_clust(feat_space,
                                 method=self.linkage_method,
@@ -602,9 +612,12 @@ class SelectiveSearch(Seg):
         # range regarding the number of pixels they contain
         bboxes = self.bboxes_from_clust(xy_coords, clust_dict)
         
+        bboxes['bg_mean'] = bg_mean
+        
         # Cast columns with corners to integers
         bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
-        'ybr':int})
+        'ybr':int,'bg_mean':int})
+        
         # test_img = np.ones(img.shape)*2900
         # test_img[yx_pix[:,0],yx_pix[:,1]] =  pix.flatten()
         
