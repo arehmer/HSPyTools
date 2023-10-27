@@ -22,6 +22,7 @@ from scipy import ndimage
 from sklearn.cluster import AgglomerativeClustering
 
 from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.cluster.vq import kmeans2
 
 from hspytools.cv.filters import Convolution
 from hspytools.cv.thresh import Otsu
@@ -33,6 +34,33 @@ class Seg():
         self.w = w
         self.h = h
         self.pix_frame = kwargs.pop('pix_frame',1)
+    
+    def get_proposals(self,video):
+        
+        bbox_annnot = []
+        
+        for i in video.index:
+            # Convert row from DataFrame to array
+            frame = video.loc[i].values.reshape((self.h,self.w))
+            
+            # Get bounding boxes
+            bbox_frame = self.segment_frame(frame)
+            
+            # Add a column for the image id
+            bbox_frame['image_id'] = i
+            
+            bbox_annnot.append(bbox_frame)
+        
+        # Concatenate to one large DataFrame
+        bbox_annnot = pd.concat(bbox_annnot)
+        
+        # Reindex so index is unique
+        bbox_annnot = bbox_annnot.reset_index(drop=True)
+        
+        # Name index "id" for compatiblity with all other classes
+        bbox_annnot.index.rename('id',inplace=True)
+            
+        return bbox_annnot
     
     def bboxes_from_clust(self,pix_coords,clust_dict):
         """
@@ -82,12 +110,7 @@ class Seg():
             # Write to dataframe
             bboxes.loc[c] = [x_min,y_min,x_max,y_max,fill_ratio] 
             
-        # Sort by fill ration
-        bboxes = bboxes.sort_values('fill_ratio',axis=0,ascending=False)
-        
-        # Delete duplicates
-        idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
-        bboxes = bboxes.loc[~idx_dupl]
+
         
         return bboxes
             
@@ -190,7 +213,6 @@ class Seg():
                 
         return img_thresh
         
-
 
 class ClustSeg(Seg):
     
@@ -499,9 +521,136 @@ def hierarch_clust(img,**kwargs):
     return df,df_stat
     
 
+class Kmeans(Seg):
+    """
+    Class for performing image segmentation using the scipy implementation
+    of K-means clustering
+    
+    https://docs.scipy.org/doc/scipy/reference/cluster.vq.html#module-scipy.cluster.vq
+    """
+    
+    def __init__(self,w,h,**kwargs):
+        
+        self.thresholder = Otsu(**kwargs)
+        self.k_max = 5
+        
+        self.bbox_sizelim = kwargs.pop('bbox_sizelim',(4,30)) 
+        
+        super().__init__(w,h,**kwargs)
+    
+    def segment_frame(self,img):
+        
+        # Generate a matrix containing cartesian coordinates of pixels in image
+        y_coords,x_coords = np.where(~np.isnan(img)) 
+        xy_coords = np.vstack((x_coords,y_coords)).T
+        
+        # Convert pixels in image to rwo vector
+        pix = img[xy_coords[:,1],xy_coords[:,0]].reshape((-1,1))
+        
+        # Perform thresholding using Otsu's method
+        pix_bel,pix_abv = self.thresholder.threshold(pix)
+        
+        # Filter out NaNs, kMeans can't deal with them
+        idx_nona = ~np.isnan(pix_abv)
+        pix_abv = pix_abv[idx_nona].reshape((-1,1))
+        
+        xy_coords_abv = xy_coords[idx_nona.flatten(),:]
+        
+        # Perform clustering for different numbers of clusters
+        
+        bboxes = []
+        
+        for k in range(1,self.k_max):
 
+            clust_dict = self.cluster(pix_abv,xy_coords_abv,k)
+        
+            # Get Bounding Boxes around pixel clusters
+            bboxes_k = self.bboxes_from_clust(xy_coords_abv,clust_dict)
+            
+            # Append bounding bboxes from this iteration to list
+            bboxes.append(bboxes_k)
+            
+        bboxes = pd.concat(bboxes)    
+        
+        
+        # Delete duplicates
+        idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
+        bboxes = bboxes.loc[~idx_dupl]
+        
+        # Calculate the mean of the background for HOG purposes
+        bg_mean = np.nanmean(pix_bel)
+        bboxes['bg_mean'] = bg_mean
+        
+        # Cast all columns to integers
+        bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
+        'ybr':int,'bg_mean':int})
+        
+        return bboxes
+
+    def filter_bboxes(bboxes):
+        """
+        Applies customized heuristics for filtering out boundind boxes based on
+        certain criteria.
+
+        Parameters
+        ----------
+        bboxes : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        min_size = self.bbox_sizelim[0]
+        max_size = self.bbox_sizelim[1]
+        
+        # Filter out boxes that are above or below a certain size 
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=min_size]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=min_size]
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=max_size]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=max_size]        
+        
+        return bboxes
+        
+        
+    def cluster(self,pix,pix_coords,k):
+        
+        # Normalize pixels and coordinates
+        pix_coords_norm = pix_coords / [self.w,self.h]
+        
+        pix_norm = (pix - pix.min()) / \
+            (pix.max(axis=0) - pix.min(axis=0))
+        
+        # Combine pixel intensities and coordinates to feature space        
+        feat = np.hstack((pix_coords_norm,pix_norm))
+        
+        """ Implement clever initialization here """
+        
+        # perform clustering  
+        centroid,label = kmeans2(data = feat,
+                                 k = k)
+        
+        # create a dictionary mapping storing which pixels belong to which 
+        # cluster
+        clust_dict = {c:label==c for c in np.unique(label)}
+
+        return clust_dict
+        
+
+        
+        
 
 class SelectiveSearch(Seg):
+    
+    """ 
+    Class for performing image segmentation using the scipy implementation
+    of agglomoroative clustering
+    
+    Linkage documentation
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
+    """
     
     def __init__(self,w,h,**kwargs):
         
@@ -510,10 +659,7 @@ class SelectiveSearch(Seg):
         self.hierarch_clust = linkage
         
         self.thresholder = Otsu(**kwargs)
-        """
-        Linkage documentation
-        https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html
-        """
+
         
         self.linkage_method = kwargs.pop('linkage_method','weighted')
         self.linkage_metric = kwargs.pop('linkage_metric','euclidean')
@@ -532,33 +678,33 @@ class SelectiveSearch(Seg):
         pass
         
     
-    def get_proposals(self,video):
+    # def get_proposals(self,video):
         
-        bbox_annnot = []
+    #     bbox_annnot = []
         
-        for i in video.index:
-            # Convert row from DataFrame to array
-            frame = video.loc[i].values.reshape((self.h,self.w))
+    #     for i in video.index:
+    #         # Convert row from DataFrame to array
+    #         frame = video.loc[i].values.reshape((self.h,self.w))
             
-            # Get bounding boxes
-            bbox_frame = self.segment_frame(frame)
+    #         # Get bounding boxes
+    #         bbox_frame = self.segment_frame(frame)
             
-            # Add a column for the image id
-            bbox_frame['image_id'] = i
+    #         # Add a column for the image id
+    #         bbox_frame['image_id'] = i
             
-            bbox_annnot.append(bbox_frame)
+    #         bbox_annnot.append(bbox_frame)
         
-        # Concatenate to one large DataFrame
-        bbox_annnot = pd.concat(bbox_annnot)
+    #     # Concatenate to one large DataFrame
+    #     bbox_annnot = pd.concat(bbox_annnot)
         
-        # Reindex so index is unique
-        bbox_annnot = bbox_annnot.reset_index(drop=True)
+    #     # Reindex so index is unique
+    #     bbox_annnot = bbox_annnot.reset_index(drop=True)
         
-        # Name index "id" for compatiblity with all other classes
-        bbox_annnot.index.rename('id',inplace=True)
+    #     # Name index "id" for compatiblity with all other classes
+    #     bbox_annnot.index.rename('id',inplace=True)
             
-        return bbox_annnot
-        
+    #     return bbox_annnot
+    
         
     def segment_frame(self,img):
         
@@ -574,6 +720,7 @@ class SelectiveSearch(Seg):
         
         # plt.figure()
         # plt.imshow(above_thresh.reshape((40,60)))
+        
         # Calculate the mean of the background for HOG purposes
         bg_mean = np.nanmean(below_thresh)
         
@@ -618,11 +765,12 @@ class SelectiveSearch(Seg):
         bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
         'ybr':int,'bg_mean':int})
         
-        # test_img = np.ones(img.shape)*2900
-        # test_img[yx_pix[:,0],yx_pix[:,1]] =  pix.flatten()
+        # Sort by fill ratio
+        bboxes = bboxes.sort_values('fill_ratio',axis=0,ascending=False)
         
-        # plt.figure()
-        # plt.imshow(test_img)
+        # Delete duplicates
+        idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
+        bboxes = bboxes.loc[~idx_dupl]
         
         return bboxes
         
