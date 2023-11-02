@@ -34,6 +34,13 @@ class Seg():
         self.w = w
         self.h = h
         self.pix_frame = kwargs.pop('pix_frame',1)
+        
+        self.lonely_pix_filter = Convolution(mode='same')
+        conv_filter = np.zeros((3,3))
+        conv_filter[:,1] = 1
+        conv_filter[1,:] = 1
+        conv_filter[1,1] = 2
+        self.lonely_pix_filter.k = conv_filter
     
     def get_proposals(self,video):
         
@@ -113,9 +120,52 @@ class Seg():
 
         
         return bboxes
-            
+    
+    def filter_lonely_pix(self,xy_coords,pix):
+        """
+        Filters the selected foregound pixels using a convolution filter to 
+        determine the number on nonzero neighbouring pixels and thresholding 
+        to get rid of pixels with less than a specified number of neighbours
         
+        Parameters
+        ----------
+        pix : TYPE
+            DESCRIPTION.
+        pix_coords : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """    
         
+        # initialize a zero image
+        img_orig = np.zeros((self.h,self.w))
+        img_conv = np.zeros((self.h,self.w))
+        
+        # Restore original image
+        img_orig[xy_coords[:,1],xy_coords[:,0]] = pix.flatten()
+        
+        # Make a binary image for convolution
+        img_conv[xy_coords[:,1],xy_coords[:,0]] = 1
+        
+        # Apply convolution filter
+        img_conv = self.lonely_pix_filter.convolve(img_conv)
+        
+        # Threshold image 
+        img_conv[img_conv<3] = 0
+        img_conv[img_conv>=3] = 1
+        
+        # Get coordinates of nonzero pixels
+        y_coords_filt,x_coords_filt = np.where(img_conv>0) 
+        xy_coords_filt = np.vstack((x_coords_filt,y_coords_filt)).T
+        
+        # Get pixel intensities
+        pix_filt =  img_orig[y_coords_filt,x_coords_filt].reshape((-1,1))
+        
+        return xy_coords_filt,pix_filt
+    
     def write_to_png(self,title,file_name):
         """
         Save the last image and the segmented image as a png for later 
@@ -527,6 +577,9 @@ class Kmeans(Seg):
     of K-means clustering
     
     https://docs.scipy.org/doc/scipy/reference/cluster.vq.html#module-scipy.cluster.vq
+    
+    Link to paper explaining the initialization technique:
+    https://theory.stanford.edu/%7Esergei/papers/kMeansPP-soda.pdf
     """
     
     def __init__(self,w,h,**kwargs):
@@ -553,8 +606,11 @@ class Kmeans(Seg):
         # Filter out NaNs, kMeans can't deal with them
         idx_nona = ~np.isnan(pix_abv)
         pix_abv = pix_abv[idx_nona].reshape((-1,1))
-        
         xy_coords_abv = xy_coords[idx_nona.flatten(),:]
+        
+        # Perform a convolution on the foreground, that gets rid of lonely
+        # pixels that just crossed the threshold by chance
+        # xy_coords_abv,pix_abv = self.filter_lonely_pix(xy_coords_abv,pix_abv)
         
         # Perform clustering for different numbers of clusters
         
@@ -587,7 +643,7 @@ class Kmeans(Seg):
         
         return bboxes
 
-    def filter_bboxes(bboxes):
+    def filter_bboxes(self,bboxes):
         """
         Applies customized heuristics for filtering out boundind boxes based on
         certain criteria.
@@ -617,7 +673,7 @@ class Kmeans(Seg):
         
     def cluster(self,pix,pix_coords,k):
         
-        # Normalize pixels and coordinates
+        # # Normalize pixels and coordinates
         pix_coords_norm = pix_coords / [self.w,self.h]
         
         pix_norm = (pix - pix.min()) / \
@@ -625,12 +681,13 @@ class Kmeans(Seg):
         
         # Combine pixel intensities and coordinates to feature space        
         feat = np.hstack((pix_coords_norm,pix_norm))
+        # feat = np.hstack((pix_coords,pix))
         
-        """ Implement clever initialization here """
-        
-        # perform clustering  
+        # feat = pix_coords.astype(float)
+        # perform clustering using the k-means++ initialization
         centroid,label = kmeans2(data = feat,
-                                 k = k)
+                                 k = k,
+                                 minit='++')
         
         # create a dictionary mapping storing which pixels belong to which 
         # cluster
