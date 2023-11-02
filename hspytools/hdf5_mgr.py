@@ -335,12 +335,14 @@ class hdf5_mgr():
                     print('Target group is deleted and rewritten.\n')
                     self.delete_group(target)
                     
-                    # copy soecified groups in source to target
+                    # copy specified groups in source to target
                     for group in groups:
                         hdf5_file.copy(source+'/'+group,target+'/'+group)
+                        
+                    success = True
                     
                 else:
-                    print('No data is written to group. Pass mode="overwrite" \n to overwrite existing data.')
+                    print('No data is written to group. Pass mode="w" \n to overwrite existing data.')
             else:    
                 # copy soecified groups in source to target
                 for group in groups:

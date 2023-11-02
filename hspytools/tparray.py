@@ -635,7 +635,7 @@ class TPArray():
         VijPixC =  Pixel * self._PCSCALEVAL / PixC.flatten()
         
         # Write to dataframe
-        df_meas.loc[self._pix] = VijPixC.flatten()
+        df_meas.loc[self._pix] = VijPixC
         
         return df_meas
         
