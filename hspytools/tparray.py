@@ -156,8 +156,8 @@ class TPArray():
         ee['adr_ptatOffset'] = np.array([3, 8])
         ee['adr_ptat_th1'] = np.array([3, 12])
         ee['adr_ptat_th2'] = np.array([3, 14])
-        ee['adr_vddScaling'] = np.array([4, 14])
-        ee['adr_vddScalingOff'] = np.array([4, 15])
+        ee['adr_vddScGrad'] = np.array([4, 14])
+        ee['adr_vddScOff'] = np.array([4, 15])
         ee['adr_globalOff'] = np.array([5, 4])
         ee['adr_globalGain'] = np.array([5, 5])
         
@@ -338,10 +338,10 @@ class TPArray():
         ptat_th2 = bccData[ee['adr_ptat_th2'][0], ee['adr_ptat_th2'][1] + 1] * 256 + bccData[ee['adr_ptat_th2'][0], ee['adr_ptat_th2'][1]]
         
         # get VddScaling
-        vddScaling = bccData[ee['adr_vddScaling'][0], ee['adr_vddScaling'][1]]
+        vddScGrad = bccData[ee['adr_vddScGrad'][0], ee['adr_vddScGrad'][1]]
         
         # get VddScalingOff
-        vddScalingOff = bccData[ee['adr_vddScalingOff'][0], ee['adr_vddScalingOff'][1]]
+        vddScOff = bccData[ee['adr_vddScOff'][0], ee['adr_vddScOff'][1]]
         
         # get GlobalOff
         globalOff = ctypes.c_int8(bccData[ee['adr_globalOff'][0], ee['adr_globalOff'][1]]).value
@@ -464,8 +464,8 @@ class TPArray():
         # In the end package all the important stuff in a dict and return
         
         bcc['gradScale'] = gradScale
-        bcc['vddScaling'] = vddScaling
-        bcc['vddScalingOff'] = vddScalingOff
+        bcc['vddScGrad'] = vddScGrad
+        bcc['vddScOff'] = vddScOff
         bcc['pij'] = pij
         bcc['pixcmin'] = pixcmin
         bcc['pixcmax'] = pixcmax
@@ -497,6 +497,8 @@ class TPArray():
         size = (self._size[1],self._size[0])
         
         Pixel = df_meas[self._pix] 
+        
+        # Pixel['pix0'] = 34099.48235294117
         
         # Get stuff for calculation
         ThGrad = self._bcc['thGrad'].reshape(size)
@@ -560,9 +562,9 @@ class TPArray():
         # Get stuff for calculation
         vddCompGrad = self._bcc['vddCompGrad']
         vddCompOff = self._bcc['vddCompOff']
-        vddScOff = self._bcc['vddScalingOff'].item()
-        vddScGrad = self._bcc['gradScale'].item()
-        vddScale = self._bcc['vddScaling'].item()
+        vddScOff = self._bcc['vddScOff'].item()
+        vddScGrad = self._bcc['vddScGrad'].item()
+
 
         vdd_av = df_meas[self._vdd].values.item()
         vdd_th1 = self._bcc['vddMeas_th1']
@@ -602,13 +604,38 @@ class TPArray():
         # Apply compensation 
         vdd = ((vddCompGrad*ptat_av)/(2**vddScGrad)+vddCompOff) / (2**vddScOff)
         vdd = vdd * (vdd_av - vdd_th1 - \
-                     (vdd_th2-vdd_th1)/(ptat_th2-ptat_th1)*(ptat_av-ptat_th1))
+                     ((vdd_th2-vdd_th1)/(ptat_th2-ptat_th1))*(ptat_av-ptat_th1))
         
-        
-
         V_vdd_comp = Pixel.values - vdd
         
         df_meas.loc[self._pix] = V_vdd_comp.flatten()
+        
+        return df_meas
+    
+    def _comp_sens(self,df_meas):
+        
+        # Only for this function reverse self._size for easy use in numpy
+        size = (self._size[1],self._size[0])
+        
+        Pixel = df_meas[self._pix] 
+        
+        # Get stuff for calculation
+        Pij = self._bcc['pij']
+        PixCmin = self._bcc['pixcmin']
+        PixCmax = self._bcc['pixcmax']
+        GlobGain = self._bcc['globalGain']
+        eps = self._bcc['epsilon']
+        
+        
+        # Calculate Sensitivity coefficients
+        PixC = (( Pij.reshape((-1,1)) * (PixCmax-PixCmin)  / 65535)  + PixCmin) \
+            * eps/100 * GlobGain/10000
+            
+        # Compensate pixel voltage
+        VijPixC =  Pixel * self._PCSCALEVAL / PixC.flatten()
+        
+        # Write to dataframe
+        df_meas.loc[self._pix] = VijPixC
         
         return df_meas
         
@@ -631,9 +658,10 @@ class TPArray():
         no conversion in dK
         """
         
-        df_meas = self._comp_thermal_offset(df_meas)
+        df_meas = self._comp_thermal_offset(df_meas.copy())
         df_meas = self._comp_electrical_offset(df_meas)
         df_meas = self._comp_vdd(df_meas)
+        df_meas = self._comp_sens(df_meas)
         df_meas = self._calc_Tamb0(df_meas)
         
         return df_meas
