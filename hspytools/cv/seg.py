@@ -26,6 +26,7 @@ from scipy.cluster.vq import kmeans2
 
 from hspytools.cv.filters import Convolution
 from hspytools.cv.thresh import Otsu
+from hspytools.clust.gk import GK
     
 class Seg():
     
@@ -641,6 +642,9 @@ class Kmeans(Seg):
         bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
         'ybr':int,'bg_mean':int})
         
+        # Filter out boxes that are too large or too small
+        bboxes = self.filter_bboxes(bboxes)
+        
         return bboxes
 
     def filter_bboxes(self,bboxes):
@@ -696,7 +700,136 @@ class Kmeans(Seg):
         return clust_dict
         
 
+class FuzzyGK(Seg):
+    """
+    Class for performing image segmentation using the scipy implementation
+    of K-means clustering
+    
+    https://docs.scipy.org/doc/scipy/reference/cluster.vq.html#module-scipy.cluster.vq
+    
+    Link to paper explaining the initialization technique:
+    https://theory.stanford.edu/%7Esergei/papers/kMeansPP-soda.pdf
+    """
+    
+    def __init__(self,w,h,**kwargs):
         
+        self.thresholder = Otsu(**kwargs)
+        self.k_max = 5
+        
+        self.bbox_sizelim = kwargs.pop('bbox_sizelim',(4,30)) 
+        
+        super().__init__(w,h,**kwargs)
+    
+    def segment_frame(self,img):
+        
+        # Generate a matrix containing cartesian coordinates of pixels in image
+        y_coords,x_coords = np.where(~np.isnan(img)) 
+        xy_coords = np.vstack((x_coords,y_coords)).T
+        
+        # Convert pixels in image to rwo vector
+        pix = img[xy_coords[:,1],xy_coords[:,0]].reshape((-1,1))
+        
+        # Perform thresholding using Otsu's method
+        pix_bel,pix_abv = self.thresholder.threshold(pix)
+        
+        # Filter out NaNs, kMeans can't deal with them
+        idx_nona = ~np.isnan(pix_abv)
+        pix_abv = pix_abv[idx_nona].reshape((-1,1))
+        xy_coords_abv = xy_coords[idx_nona.flatten(),:]
+        
+        # Perform a convolution on the foreground, that gets rid of lonely
+        # pixels that just crossed the threshold by chance
+        # xy_coords_abv,pix_abv = self.filter_lonely_pix(xy_coords_abv,pix_abv)
+        
+        # Perform clustering for different numbers of clusters
+        
+        bboxes = []
+
+        for k in range(2,self.k_max):
+
+            clust_dict = self.cluster(pix_abv,xy_coords_abv,k)
+        
+            # Get Bounding Boxes around pixel clusters
+            bboxes_k = self.bboxes_from_clust(xy_coords_abv,clust_dict)
+            
+            # Append bounding bboxes from this iteration to list
+            bboxes.append(bboxes_k)
+            
+        bboxes = pd.concat(bboxes)    
+        
+        
+        # Delete duplicates
+        idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
+        bboxes = bboxes.loc[~idx_dupl]
+        
+        # Calculate the mean of the background for HOG purposes
+        bg_mean = np.nanmean(pix_bel)
+        bboxes['bg_mean'] = bg_mean
+        
+        # Cast all columns to integers
+        bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
+        'ybr':int,'bg_mean':int})
+        
+        # Filter out boxes that are too large or too small
+        bboxes = self.filter_bboxes(bboxes)
+        
+        return bboxes
+
+    def filter_bboxes(self,bboxes):
+        """
+        Applies customized heuristics for filtering out boundind boxes based on
+        certain criteria.
+
+        Parameters
+        ----------
+        bboxes : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        min_size = self.bbox_sizelim[0]
+        max_size = self.bbox_sizelim[1]
+        
+        # Filter out boxes that are above or below a certain size 
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=min_size]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=min_size]
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=max_size]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=max_size]        
+        
+        return bboxes
+        
+        
+    def cluster(self,pix,pix_coords,k):
+        
+        # # Normalize pixels and coordinates
+        pix_coords_norm = pix_coords / [self.w,self.h]
+        
+        pix_norm = (pix - pix.min()) / \
+            (pix.max(axis=0) - pix.min(axis=0))
+        
+        # Combine pixel intensities and coordinates to feature space        
+        feat = np.hstack((pix_coords_norm,pix_norm))
+        
+        # feat = pix_coords_norm
+        
+        # Initialize Fuzzy GK Clustering 
+        fuzzyGK = GK(n_clusters = k)
+        
+        # Fit 
+        fuzzyGK.fit(feat)
+        
+        # Get labels of pixels
+        label = fuzzyGK.predict(feat)
+        
+        # create a dictionary mapping storing which pixels belong to which 
+        # cluster
+        clust_dict = {c:label==c for c in np.unique(label)}
+
+        return clust_dict        
         
 
 class SelectiveSearch(Seg):
