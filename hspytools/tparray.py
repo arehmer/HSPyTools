@@ -213,15 +213,21 @@ class TPArray():
     
     def import_LuT(self,lut_path):
         
+        # Import Look up Table as pd.DataFrame
+        LuT = pd.read_csv(lut_path, sep=',',header=0,index_col = 0)
+        
+        # Convert column header to int
+        LuT.columns = np.array([int(c) for c in LuT.columns])
+        
         # Load LuT from file
-        df_lut = pd.read_csv(lut_path.absolute(),header=None,
-                             sep = '\t')
+        # df_lut = pd.read_csv(lut_path.absolute(),header=None,
+        #                      sep = '\t')
         
-        LuT = {}
+        # LuT = {}
         
-        LuT['ta'] = df_lut.loc[[0]].values[:,1:].astype(int).flatten()
-        LuT['digits'] = df_lut.loc[1::,0].values.astype(int).flatten()
-        LuT['to'] = df_lut.loc[1::].values[:,1::].astype(int)
+        # LuT['ta'] = df_lut.loc[[0]].values[:,1:].astype(int).flatten()
+        # LuT['digits'] = df_lut.loc[1::,0].values.astype(int).flatten()
+        # LuT['to'] = df_lut.loc[1::].values[:,1::].astype(int)
         
         self._LuT = LuT
         
@@ -673,7 +679,14 @@ class TPArray():
         no conversion in dK
         """
         
+        # Perform all compensation operations on data
         df_meas = self.rawmeas_comp(df_meas)
+        
+        # Load LuT
+        LuT = self.LuT.copy()
+        
+        
+        
         
         Warning('''rawmeas_to_dK returns compensated voltage, not dK! Remaining operations need to be implemented for dataframe format!''')
         
