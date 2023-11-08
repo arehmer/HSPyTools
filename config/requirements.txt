@@ -1,7 +1,6 @@
-pandas>=1.5.2
-h5py>=3.7.0
-numpy>=1.23.5
+pandas
+h5py
+numpy
 matplotlib
-cloudpickle
 scipy
 scikit-learn
