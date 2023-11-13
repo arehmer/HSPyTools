@@ -4,4 +4,4 @@ numpy
 matplotlib
 scipy
 scikit-learn
-pytables
+tables
