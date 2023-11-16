@@ -473,7 +473,7 @@ class QuadriPolygon():
         in_poly = False
 
         # get polygon
-        polygon = self.polygon
+        polygon = self.polygon.copy()
         
         # Extract scheduling variables from df_pnt
         df_pnt = df_pnt[self.u]
@@ -494,6 +494,8 @@ class QuadriPolygon():
         
         # Project point on all edges
         for e in E:
+            
+
            
             v0 = polygon.loc[e[0]]
             v1 = polygon.loc[e[1]]
@@ -524,11 +526,368 @@ class QuadriPolygon():
           
         return in_poly   
             
-    
     def pnt_on_edge(self,df_pnt):
         '''
         Calculates the closest point on the edge of the quadrilateral 
         polygon to a given point   
+        
+    
+        Parameters
+        ----------
+        df : TYPE
+            DESCRIPTION.
+    
+        Returns
+        -------
+        None.
+    
+        '''
+        
+
+        
+        # dataframe to series
+        pnt = df_pnt.squeeze()
+        
+        # Extract scheduling variables from df_pnt
+        pnt = pnt[self.u]
+        
+        # Edges of the polygon
+        # E = [('v0','v1'),('v1','v2'),('v2','v3'),('v3','v0')]
+              
+        # list for storing distances in
+        dist = []
+        
+        # List for storing intersection with polygon in
+        intersect = []
+    
+        u0 = 'Ud'
+        u1 = 'Tamb0'
+        
+        # Loop over edges v1,v2 and v3,v0 first
+        E = [('v1','v2'),('v3','v0')]
+        
+        
+        # Project point on edges ('v1','v2'),('v3','v0')
+        for e in E:
+            
+            # Get quadrilateral polygon
+            df_qpoly = self.polygon.copy()
+           
+            #Get end points of line segment
+            v0 = df_qpoly.loc[e[0]]
+            v1 = df_qpoly.loc[e[1]]
+        
+            # Check if point can be projected on line segment
+            
+            # Check temperature condition first!
+            # if min(v0[u1], v1[u1]) < pnt[u1] < max(v0[u1], v1[u1]):
+                
+            # Write line segment as line equation Tamb0 = a*Ud
+            dv = v1 - v0
+            a = dv[u1]/dv[u0]
+            
+            # Write line segment through point as line equation Tamb0 = d
+            d = pnt[u1] - v0[u1]
+            
+            # Point of interesection 
+            isect = pd.Series(data=[d/a + v0[u0] ,a*(d/a) + v0[u1]],
+                                 index = [u0,u1])
+            
+            # Save intersection point
+            intersect.append(isect)
+        
+            # Distance between intersection and point
+            dist.append(np.linalg.norm(pnt-isect))
+        
+        if len(dist)>0:
+            
+            # Find minimal distance
+            idx_min = np.array(dist).argmin()
+            
+            # Get the corresponding intersection point
+            isect = intersect[idx_min]
+            
+            # check if that point is in the polygon
+            if self.in_polygon(isect+0.001*isect) or \
+                self.in_polygon(isect-0.001*isect):
+                    
+                    
+                    # Convert from series to dataframe
+                    df_isect = pd.DataFrame(data=[isect.values],
+                                            columns=isect.index,
+                                            index=df_pnt.index)
+                    
+                    return df_isect
+                
+            
+        # If no intersection point could be returned, project point on   
+        # edge ('v0','v1') and ('v2','v3')
+        E = [('v0','v1'),('v2','v3')]
+        
+        # list for storing distances in
+        dist = []
+        
+        # List for storing intersection with polygon in
+        intersect = []
+                
+        # Project point on edges ('v1','v2'),('v3','v0')
+        for e in E:
+            # Get quadrilateral polygon
+            df_qpoly = self.polygon.copy()
+           
+            #Get end points of line segment
+            v0 = df_qpoly.loc[e[0]]
+            v1 = df_qpoly.loc[e[1]]
+        
+            # Check if point can be projected on line segment
+        
+            # if min(v0[u0], v1[u0]) < pnt[u0] < max(v0[u0], v1[u0]):
+                
+            # Write line segment as line equation Ud = a*Tamb0
+            dv = v1 - v0
+            a = dv[u0]/dv[u1]
+            
+            # Write line segment through point as line equation Ud = d
+            d = pnt[u0] - v0[u0]
+            
+            # Point of interesection 
+            isect = pd.Series(data=[d/a + v0[u1] ,a*(d/a) + v0[u0]],
+                                  index = [u1,u0])
+            
+            # Save intersection point
+            intersect.append(isect)
+        
+            # Distance between intersection and point
+            dist.append(np.linalg.norm(pnt-isect))
+        
+        if len(dist)>0:
+            idx_min = np.array(dist).argmin()
+            
+            # Get the corresponding intersection point
+            isect = intersect[idx_min]
+            
+            # Check if intersection is in polygon 
+            if self.in_polygon(isect+0.001*isect) or \
+                self.in_polygon(isect-0.001*isect):
+                    # Convert from series to dataframe
+                    df_isect = pd.DataFrame(data=[isect.values],
+                                            columns=isect.index,
+                                            index=df_pnt.index)
+                    
+                    return df_isect
+                 
+        # In the case that projection on the edge was not possible, 
+        # find the closest vertex      
+        
+        # list for storing distances in
+        dist = []
+        
+        # List for storing intersection with polygon in
+        intersect = []
+        
+        df_qpoly['d_Tamb0'] = abs(df_qpoly['Tamb0'] - df_pnt['Tamb0'].item())
+        
+        # Sort by difference and keep the first two
+        df_qpoly = df_qpoly.sort_values(by='d_Tamb0')
+        
+        df_qpoly = df_qpoly.iloc[0:2]
+        
+        # Among these two vertices find the closest            
+        vert = [df_qpoly.loc[v] for v in df_qpoly.index]
+        
+        # Find vertex closest 
+        d =  [np.linalg.norm(pnt[self.u]-v[self.u]) for v in vert]
+                   
+        d = np.array(d)
+        
+        # Distance between closest vertice and point
+        dist.append(min(d))
+        
+        # Save intersection point
+        isect = (vert[d.argmin()]).copy()
+        intersect.append(isect[self.u])
+        
+        df_isect = pd.DataFrame(data=[isect.values],
+                                columns=isect.index,
+                                index=df_pnt.index)
+         
+
+         
+        return df_isect
+            
+    
+             
+    def pnt_on_edge_old(self,df_pnt):
+        '''
+        Calculates the closest point on the edge of the quadrilateral 
+        polygon to a given point   
+        
+    
+        Parameters
+        ----------
+        df : TYPE
+            DESCRIPTION.
+    
+        Returns
+        -------
+        None.
+    
+        '''
+        
+
+        
+        # dataframe to series
+        pnt = df_pnt.squeeze()
+        
+        # Extract scheduling variables from df_pnt
+        pnt = pnt[self.u]
+        
+        # Edges of the polygon
+        E = [('v0','v1'),('v1','v2'),('v2','v3'),('v3','v0')]
+              
+        # list for storing distances in
+        dist = []
+        
+        # List for storing intersection with polygon in
+        intersect = []
+        
+
+     
+        
+        # Project point on all edges
+        for e in E:
+            
+            # Get quadrilateral polygon
+            df_qpoly = self.polygon.copy()
+           
+            #Get end points of line segment
+            v0 = df_qpoly.loc[e[0]]
+            v1 = df_qpoly.loc[e[1]]
+            
+
+            # Check if point can be projected on line segment
+            u0 = 'Ud'
+            u1 = 'Tamb0'
+            
+            # Check temperature condition first!
+            if min(v0[u1], v1[u1]) < pnt[u1] < max(v0[u1], v1[u1]):
+                
+                # Write line segment as line equation Tamb0 = a*Ud
+                dv = v1 - v0
+                a = dv[u1]/dv[u0]
+                
+                # Write line segment through point as line equation Tamb0 = d
+                d = pnt[u1] - v0[u1]
+                
+                # Point of interesection 
+                isect = pd.Series(data=[d/a + v0[u0] ,a*(d/a) + v0[u1]],
+                                     index = [u0,u1])
+                
+                # Check if intersection is in polygon 
+                if self.in_polygon(isect+0.001*isect) or \
+                    self.in_polygon(isect-0.001*isect):
+                    
+                        dd = np.linalg.norm(pnt-isect)    
+                        
+                        # check if any vertice is closer in Ta-direction than
+                        # intersection point
+                        # if v0[u1] - pnt[u1] < dd:
+                        #     isect = v0
+                        # elif v1[u1] - pnt[u1] < dd:
+                        #     isect = v1
+                        
+                        # Save intersection point
+                        intersect.append(isect)
+                    
+                        # Distance between intersection and point
+                        dist.append(np.linalg.norm(pnt-isect))
+            
+            elif min(v0[u0], v1[u0]) < pnt[u0] < max(v0[u0], v1[u0]):
+                
+                # Write line segment as line equation Ud = a*Tamb0
+                dv = v1 - v0
+                a = dv[u0]/dv[u1]
+                
+                # Write line segment through point as line equation Ud = d
+                d = pnt[u0] - v0[u0]
+                
+                # Point of interesection 
+                isect = pd.Series(data=[d/a + v0[u1] ,a*(d/a) + v0[u0]],
+                                     index = [u1,u0])
+                
+                # Check if intersection is in polygon 
+                if self.in_polygon(isect+0.001*isect) or \
+                    self.in_polygon(isect-0.001*isect):
+                        
+                        dd = np.linalg.norm(pnt-isect)    
+                        
+                        # check if any vertice is closer in Ta-direction than
+                        # intersection point
+                        if abs(v0[u1] - pnt[u1]) < dd:
+                            isect = v0
+                        elif abs(v1[u1] - pnt[u1]) < dd:
+                            isect = v1
+                        
+                        # Save intersection point
+                        intersect.append(isect)
+
+                        # Distance between intersection and point
+                        dist.append(np.linalg.norm(pnt-isect))
+                
+                
+
+    
+                
+                        
+        # If intersection with line is not possible, find closest
+        # vertice
+        if len(intersect)==0:
+            
+            df_qpoly['d_Tamb0'] = abs(df_qpoly['Tamb0'] - df_pnt['Tamb0'].item())
+            
+            # Sort by difference and keep the first two
+            df_qpoly = df_qpoly.sort_values(by='d_Tamb0')
+            
+            df_qpoly = df_qpoly.iloc[0:2]
+            
+            # Among these two vertices find the closest            
+            vert = [df_qpoly.loc[v] for v in df_qpoly.index]
+            
+            # Find vertice closest 
+            d =  [np.linalg.norm(pnt[self.u]-v[self.u]) for v in vert]
+                       
+            d = np.array(d)
+            
+            # Distance between closest vertice and point
+            dist.append(min(d))
+            
+            # Save intersection point
+            isect = (vert[d.argmin()]).copy()
+            intersect.append(isect[self.u])
+                
+            
+            
+            
+        # In the end find and return the intersection point with the
+        # smallest distance
+        # Find minimal distance
+        idx_min = np.array(dist).argmin()
+        
+        # Return the corresponding intersection point
+        df_isect = intersect[idx_min]
+        
+        # Convert from series to dataframe
+        df_isect = pd.DataFrame(data=[df_isect.values],
+                                columns=df_isect.index,
+                                index=df_pnt.index)
+
+        
+        return df_isect           
+            
+    def orth_proj_on_edge(self,df_pnt):
+        '''
+        Calculates the orthogonal projection of a point on the edge of the 
+        quadrilateral polygon to a given point   
         
     
         Parameters
@@ -573,7 +932,7 @@ class QuadriPolygon():
             # Calculate intersection
             isect = np.dot(a,b)/norm_a * (a/norm_a) + v0
             
-            # If intersection is not on the edge
+            # If intersection is not on the edge (in polygon)
             if not self.in_polygon(isect):
                 # calculate distances to vertices
                 d1 = np.linalg.norm(pnt-v0)
