@@ -428,14 +428,17 @@ class QuadriPolygon():
         # Get the vertices of the quadrilateral polygon by sorting the data
         # and looping through it looking for the most extreme points per
         # measurement series (Ta)
-        
-        v1 = df.loc[df['Ta']==df['Ta'].min()].min()[self.u]
-        v2 = df.loc[df['Ta']==df['Ta'].min()].max()[self.u]
-        v3 = df.loc[df['Ta']==df['Ta'].max()].max()[self.u]
-        v4 = df.loc[df['Ta']==df['Ta'].max()].min()[self.u]
+        # v1 = df.loc[df['Ta']==df['Ta'].min()].min()[self.u]
+        # v2 = df.loc[df['Ta']==df['Ta'].min()].max()[self.u]
+        # v3 = df.loc[df['Ta']==df['Ta'].max()].max()[self.u]
+        # v4 = df.loc[df['Ta']==df['Ta'].max()].min()[self.u]
+
 
         # convert vertices to DataFrame
-        V = [v1,v2,v3,v4]
+        # V = [v1,v2,v3,v4]
+        
+        V = self._get_vertives(df)
+        
         polygon = []
         
         for v in range(4):
@@ -448,7 +451,52 @@ class QuadriPolygon():
         self.polygon = polygon
         
         return polygon
+    
+    def _get_vertives(self,df):
+        """
+        Derives vertices of polygon from the data. 
+        
 
+        Parameters
+        ----------
+        df : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        tol = 0.05
+        
+        # v0
+        Tamb0 = df.loc[df['Tamb0']==df['Tamb0'].min(),'Tamb0'].min()
+        Ud0 = df.loc[df['Tamb0']<=(1+tol)*Tamb0,'Ud'].min()
+        
+        v0 = pd.Series(data=[Tamb0,Ud0],index=['Tamb0','Ud'],name='v0')
+        
+        # v1
+        Tamb0 = df.loc[df['Tamb0']==df['Tamb0'].min(),'Tamb0'].min()
+        Ud1 = df.loc[df['Tamb0']<=(1+tol)*Tamb0,'Ud'].max()
+        
+        v1 = pd.Series(data=[Tamb0,Ud1],index=['Tamb0','Ud'],name='v1')
+        
+        # v2
+        Tamb2 = df.loc[df['Tamb0']==df['Tamb0'].max(),'Tamb0'].max()
+        Ud2 = df.loc[df['Tamb0']>=(1-tol)*Tamb2,'Ud'].max()
+        
+        v2 = pd.Series(data=[Tamb2,Ud2],index=['Tamb0','Ud'],name='v2')
+
+        # v3
+        Ud3 = df.loc[df['Tamb0']>=(1-tol)*Tamb2,'Ud'].min()
+        
+        v3 = pd.Series(data=[Tamb2,Ud3],index=['Tamb0','Ud'],name='v3')        
+        
+        V = [v0,v1,v2,v3]
+        
+        return V
+        
     def in_polygon(self,df_pnt):
         '''
         This method checks if a point is inside or outside the quadrilateral 
