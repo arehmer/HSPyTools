@@ -26,6 +26,15 @@ class Otsu():
         """
                 
         self.q = kwargs.pop('q',100)
+        self.mask = None
+        
+    @property
+    def mask(self):
+        return self._mask
+    
+    @mask.setter
+    def mask(self,mask):
+        self._mask = mask
     
     def threshold(self,img):
         
@@ -40,9 +49,11 @@ class Otsu():
         
         # Consider only non nan values 
         img_off = img_off[~np.isnan(img_off)].flatten()
+        
         # testing all thresholds from 0 to the maximum of the image
         threshold_range = range(int(np.nanmin(img_off)+1),
                                 int(np.nanmax(img_off))+1)
+        
         criterias = [self._1d_otsu(img_off, th) for th in threshold_range]
         
         if self.q == 100:
@@ -69,10 +80,14 @@ class Otsu():
         # Threshold image
         img_below = img.copy().astype(float)
         img_above = img.copy().astype(float)
-        img_below[img_below>best_threshold] = np.nan
+        img_below[img_below>=best_threshold] = np.nan
         img_above[img_above<best_threshold] = np.nan
         
+        # Set the mask attribute of the thresholder for other classes
+        self.mask =  img>=best_threshold
+        
         return img_below,img_above
+    
     
     
     def _1d_otsu(self,img,th):

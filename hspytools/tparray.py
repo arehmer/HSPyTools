@@ -78,8 +78,6 @@ class TPArray():
             DevConst['NROFPTAT']=2
             self._fs = 47
             self._NETD = 90
-            self._NETD = 90
-
 
         elif (width,height) == (60,84):
             DevConst['VDDaddr']=5760

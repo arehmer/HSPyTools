@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import matplotlib
+import os
 # import imageio_ffmpeg
 
 
@@ -766,8 +767,8 @@ class QuadriPolygon():
             
 
             # Check if point can be projected on line segment
-            u0 = 'Ud'
-            u1 = 'Tamb0'
+            u0 = 'Ud_pv'
+            u1 = 'Tamb0_pv'
             
             # Check temperature condition first!
             if min(v0[u1], v1[u1]) < pnt[u1] < max(v0[u1], v1[u1]):
@@ -843,7 +844,7 @@ class QuadriPolygon():
         # vertice
         if len(intersect)==0:
             
-            df_qpoly['d_Tamb0'] = abs(df_qpoly['Tamb0'] - df_pnt['Tamb0'].item())
+            df_qpoly['d_Tamb0'] = abs(df_qpoly[u1] - df_pnt[u1].item())
             
             # Sort by difference and keep the first two
             df_qpoly = df_qpoly.sort_values(by='d_Tamb0')
@@ -967,3 +968,203 @@ def pd_interpolate_MI (df_input, df_toInterpolate,col):
     return pd.concat([df_input, df_toInterpolate]).sort_index()
 
 
+class LuT:
+    
+    def __init__(self,**kwargs):
+        
+        pass
+    
+    def LuT_from_df(self,df):
+        
+        
+        
+        self.LuT = df
+        
+    def LuT_from_csv(self,csv_path,offset):
+        
+        self.offset = offset
+        
+        # Import data
+        LuT = pd.read_csv(csv_path, sep=',',header=0,index_col = 0)
+        
+        # Convert column header to int
+        LuT.columns = np.array([int(c) for c in LuT.columns])
+        
+        # Subtract offset
+        LuT.index = LuT.index - offset
+        
+        self.LuT = LuT
+    
+    def LuT_to_csv(self,csv_path):
+        
+        LuT = self.LuT
+        
+        
+        pass
+    
+    def LuT_from_HTPAxls(self,sheet_name):
+              
+        xls_path = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
+        
+        index_col = 0
+        usecols = 'A,D:O'
+        skiprows = 17
+        header = 0
+        dtype = 'object'
+        
+        df = pd.read_excel(xls_path,
+                           sheet_name = sheet_name,
+                           skiprows = skiprows,
+                           index_col = index_col,
+                           usecols = usecols,
+                           header = header)
+        
+        # Delete all commata
+        df = df.replace(',','',regex=True)
+        
+        # Cast all columns to int
+        df = df.astype(np.int32)
+        
+        # Rename index
+        df.index.name = 'Ud'
+        
+        # That's it
+        self.LuT = df
+        
+        return None
+        
+    def inverse_eval_LuT(self,data,Ta_col,To_col):
+        
+        # Check if index is unique, otherwise loop will exract more than one
+        # measurement per loop and algorithm brakes down
+        if not data.index.is_unique:
+            print('Data index is not unique. reset_index() is applied!')
+            data = data.reset_index()
+        
+        
+        for meas in data.index:
+            
+            LuT_copy = self.LuT.copy()
+        
+            Ta_meas = data.loc[meas,Ta_col]
+            To_meas = data.loc[meas,To_col]
+            
+            # find the "last" column in old LuT that is smaller than the 
+            # measured Ta 
+            col_idx = LuT_copy.columns < Ta_meas
+            LuT_col = LuT_copy.columns[col_idx][-1]
+            
+            # get neighbouring column
+            Ta_col_n = LuT_copy.columns[LuT_copy.columns.get_loc(LuT_col)+1]
+            
+            # create a new column by interpolation
+            new_col = int(np.round(Ta_meas))
+            f = (new_col-LuT_col) / (Ta_col_n-LuT_col)
+            LuT_copy[new_col] = LuT_copy[LuT_col] + \
+                f*(LuT_copy[Ta_col_n]-LuT_copy[LuT_col])
+            
+            # Find index of las To in that column that is smaller than the measured To
+            Ud_row = LuT_copy.loc[LuT_copy[new_col]<To_meas].index[-1]
+            
+            # get neighbouring row
+            Ud_row_n = LuT_copy.index[LuT_copy.index.get_loc(Ud_row)+1]
+            
+            # Calculate Ud_est
+            dT = LuT_copy.loc[Ud_row_n,new_col] - LuT_copy.loc[Ud_row,new_col]
+            dU = Ud_row_n-Ud_row
+            
+            f =  dU/dT
+            
+            data.loc[meas,'Ud_LuT'] = Ud_row + \
+                (To_meas - LuT_copy.loc[Ud_row,new_col]) * f
+                
+        return data
+        
+    def eval_LuT(self,data,Ta_col,Ud_col):
+        
+        LuT = self.LuT
+        
+        for meas in data.index:
+    
+            Ta_meas = data.loc[meas,Ta_col]
+            Ud = data.loc[meas,Ud_col]
+        
+            # Find columns and indeces for bilinear interpolation
+            col_idx = LuT.columns < Ta_meas
+            LuT_col = LuT.columns[col_idx][-1]
+            Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
+            
+            row_idx = LuT.index < Ud
+            Ud_row = LuT.index[row_idx][-1]
+            Ud_row_n = LuT.index[LuT.index.get_loc(Ud_row)+1]
+            
+            
+            rect_pnts = LuT.loc[Ud_row:Ud_row_n,[LuT_col,Ta_col_n]]
+            
+            data.loc[meas,'To_LuT'] = \
+                self.get_To(rect_pnts,Ta_meas,Ud)
+                
+        return data
+        
+        
+    def get_To(self,points,Ta_meas,Ud_meas):
+        
+        x0 = points.columns[0]
+        x1 = points.columns[1]
+        
+        y0 = points.index[0]
+        y1 = points.index[1]
+    
+        
+        pt1 = (x0,y0,points.loc[y0,x0])
+        pt2 = (x0,y1,points.loc[y1,x0])
+        pt3 = (x1,y0,points.loc[y0,x1])
+        pt4 = (x1,y1,points.loc[y1,x1])
+            
+        rect_pnts = np.array([pt1,pt2,pt3,pt4])
+        
+        return self.bilinear_interpolation(Ta_meas,Ud_meas,rect_pnts)
+        
+    def bilinear_interpolation(self,x, y, points):
+        '''Interpolate (x,y) from values associated with four points.
+    
+        The four points are a list of four triplets:  (x, y, value).
+        The four points can be in any order.  They should form a rectangle.
+    
+            >>> bilinear_interpolation(12, 5.5,
+            ...                        [(10, 4, 100),
+            ...                         (20, 4, 200),
+            ...                         (10, 6, 150),
+            ...                         (20, 6, 300)])
+            165.0
+    
+        '''
+        # See formula at:  http://en.wikipedia.org/wiki/Bilinear_interpolation
+    
+        # points = sorted(points)               # order points by x, then by y
+        (x1, y1, q11), (_x1, y2, q12), (x2, _y1, q21), (_x2, _y2, q22) = points
+    
+        if x1 != _x1 or x2 != _x2 or y1 != _y1 or y2 != _y2:
+            raise ValueError('points do not form a rectangle')
+        if not x1 <= x <= x2 or not y1 <= y <= y2:
+            raise ValueError('(x, y) not within the rectangle')
+    
+        return (q11 * (x2 - x) * (y2 - y) +
+                q21 * (x - x1) * (y2 - y) +
+                q12 * (x2 - x) * (y - y1) +
+                q22 * (x - x1) * (y - y1)
+               ) / ((x2 - x1) * (y2 - y1) + 0.0)
+        
+    def plot_LuT(self):
+        
+        # LuT = self.LuT
+        
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.scatter(LuT['Tamb'], Ud_grid, To_pred.values.reshape(Ta_grid.shape))
+        # ax.set_xlabel('Tamb0')
+        # ax.set_ylabel('Ud')
+        # ax.set_zlabel('To_pred')
+        
+        pass
+            
