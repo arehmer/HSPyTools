@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib
 import os
+import openpyxl 
 # import imageio_ffmpeg
 
 
@@ -417,8 +418,18 @@ class QuadriPolygon():
     
     def __init__(self,u):
         
-        self.u = u
+        self.u = ['input1','input2']
+        
+        # Make sure Tamb0 is always the first input
+        if 'Tamb0' in u[0]:
+            self.u[0] = u[0]
+            self.u[1] = u[1]
+        else:
+            self.u[0] = u[1]
+            self.u[1] = u[0]
+            
 
+        
     def derive_polygon(self,df):
         '''
         Derive a quadrilateral polygon from the dataset, which is then used
@@ -470,28 +481,31 @@ class QuadriPolygon():
         
         tol = 0.05
         
-        # v0
-        Tamb0 = df.loc[df['Tamb0']==df['Tamb0'].min(),'Tamb0'].min()
-        Ud0 = df.loc[df['Tamb0']<=(1+tol)*Tamb0,'Ud'].min()
+        T = self.u[0]
+        U = self.u[1]
         
-        v0 = pd.Series(data=[Tamb0,Ud0],index=['Tamb0','Ud'],name='v0')
+        # v0
+        Tamb0 = df.loc[df[T]==df[T].min(),T].min()
+        Ud0 = df.loc[df[T]<=(1+tol)*Tamb0,U].min()
+        
+        v0 = pd.Series(data=[Tamb0,Ud0],index=[T,U],name='v0')
         
         # v1
-        Tamb0 = df.loc[df['Tamb0']==df['Tamb0'].min(),'Tamb0'].min()
-        Ud1 = df.loc[df['Tamb0']<=(1+tol)*Tamb0,'Ud'].max()
+        Tamb0 = df.loc[df[T]==df[T].min(),T].min()
+        Ud1 = df.loc[df[T]<=(1+tol)*Tamb0,U].max()
         
-        v1 = pd.Series(data=[Tamb0,Ud1],index=['Tamb0','Ud'],name='v1')
+        v1 = pd.Series(data=[Tamb0,Ud1],index=[T,U],name='v1')
         
         # v2
-        Tamb2 = df.loc[df['Tamb0']==df['Tamb0'].max(),'Tamb0'].max()
-        Ud2 = df.loc[df['Tamb0']>=(1-tol)*Tamb2,'Ud'].max()
+        Tamb2 = df.loc[df[T]==df[T].max(),T].max()
+        Ud2 = df.loc[df[T]>=(1-tol)*Tamb2,U].max()
         
-        v2 = pd.Series(data=[Tamb2,Ud2],index=['Tamb0','Ud'],name='v2')
+        v2 = pd.Series(data=[Tamb2,Ud2],index=[T,U],name='v2')
 
         # v3
-        Ud3 = df.loc[df['Tamb0']>=(1-tol)*Tamb2,'Ud'].min()
+        Ud3 = df.loc[df[T]>=(1-tol)*Tamb2,U].min()
         
-        v3 = pd.Series(data=[Tamb2,Ud3],index=['Tamb0','Ud'],name='v3')        
+        v3 = pd.Series(data=[Tamb2,Ud3],index=[T,U],name='v3')        
         
         V = [v0,v1,v2,v3]
         
@@ -609,8 +623,8 @@ class QuadriPolygon():
         # List for storing intersection with polygon in
         intersect = []
     
-        u0 = 'Ud'
-        u1 = 'Tamb0'
+        u0 = self.u[1]#'Ud'
+        u1 = self.u[0]#'Tamb0'
         
         # Loop over edges v1,v2 and v3,v0 first
         E = [('v1','v2'),('v3','v0')]
@@ -694,14 +708,19 @@ class QuadriPolygon():
                 
             # Write line segment as line equation Ud = a*Tamb0
             dv = v1 - v0
-            a = dv[u0]/dv[u1]
             
             # Write line segment through point as line equation Ud = d
             d = pnt[u0] - v0[u0]
             
-            # Point of interesection 
-            isect = pd.Series(data=[d/a + v0[u1] ,a*(d/a) + v0[u0]],
-                                  index = [u1,u0])
+            # In case that both vertices have same Ta_coordinate, df[u1] 
+            # will become zero. Treat this exception:            
+            if dv[u1]==0:
+                isect = pd.Series(data=[0+v0[u1] ,d + v0[u0]],
+                                     index = [u1,u0])
+            else: 
+                a = dv[u0]/dv[u1]
+                isect = pd.Series(data=[d/a + v0[u1] ,a*(d/a) + v0[u0]],
+                                     index = [u1,u0])
             
             # Save intersection point
             intersect.append(isect)
@@ -734,7 +753,7 @@ class QuadriPolygon():
         # List for storing intersection with polygon in
         intersect = []
         
-        df_qpoly['d_Tamb0'] = abs(df_qpoly['Tamb0'] - df_pnt['Tamb0'].item())
+        df_qpoly['d_Tamb0'] = abs(df_qpoly[u1] - df_pnt[u1].item())
         
         # Sort by difference and keep the first two
         df_qpoly = df_qpoly.sort_values(by='d_Tamb0')
@@ -855,14 +874,20 @@ class QuadriPolygon():
                 
                 # Write line segment as line equation Ud = a*Tamb0
                 dv = v1 - v0
-                a = dv[u0]/dv[u1]
-                
                 # Write line segment through point as line equation Ud = d
                 d = pnt[u0] - v0[u0]
                 
-                # Point of interesection 
-                isect = pd.Series(data=[d/a + v0[u1] ,a*(d/a) + v0[u0]],
-                                     index = [u1,u0])
+                # In case that both vertices have same Ta_coordinate, df[u1] 
+                # will become zero. Treat this exception:
+                if dv[u1]==0:
+                    isect = pd.Series(data=[0+v0[u1] ,d + v0[u0]],
+                                         index = [u1,u0])
+                
+                else: 
+                    a = dv[u0]/dv[u1]
+                    isect = pd.Series(data=[d/a + v0[u1] ,a*(d/a) + v0[u0]],
+                                         index = [u1,u0])
+                
                 
                 # Check if intersection is in polygon 
                 if self.in_polygon(isect+0.001*isect) or \
@@ -1026,6 +1051,7 @@ class LuT:
         
         
         
+        
         self.LuT = df
         
     def LuT_from_csv(self,csv_path,offset):
@@ -1043,13 +1069,88 @@ class LuT:
         
         self.LuT = LuT
     
-    def LuT_to_csv(self,csv_path):
+    def LuT_to_xls(self,xls_path):
         
-        LuT = self.LuT
+        # Load LuT
+        LuT = self.LuT.copy()
         
+        # Initialize writer object
+        writer = self._init_xlswriter(xls_path)
         
-        pass
-    
+        # Start a list where columns are in the right order
+        columns_ordered = list(LuT.columns)
+        
+        # Reindex so Ud becomes column
+        LuT = LuT.reset_index(drop=False)        
+        
+        # Add a column vector for the offset-free voltage signal
+        LuT['Ud_norm'] = LuT['Ud'] - LuT['Ud'].min() 
+        
+        # Opening and closing brackets
+        LuT['br_o'] = ['{']*len(LuT)
+        LuT['br_c'] = ['},']*len(LuT)
+        
+        columns_ordered = ['Ud','Ud_norm','br_o'] + columns_ordered + ['br_c']
+        
+        LuT = LuT[columns_ordered]
+        
+        LuT.to_excel(writer,
+                     sheet_name = xls_path.stem,
+                     startrow=12,
+                     index=False)
+        
+        # Then write normalized Ud to row 9
+        df_V = pd.DataFrame(data=[],
+                            columns=np.arange(0,len(LuT),1,dtype=int),
+                            index=['V'])
+        
+        columns_ordered = list(df_V.columns)
+                
+        df_V.loc['V'] = LuT['Ud_norm'].values.astype(int)
+        
+        df_V = df_V.astype('str')
+        df_V = df_V+','
+        
+        df_V['br_o'] = '{'
+        df_V['br_c'] = '};'
+
+        columns_ordered =  ['br_o'] + columns_ordered + ['br_c']
+        
+        df_V = df_V[columns_ordered]
+        
+        df_V.to_excel(writer,
+                      sheet_name = xls_path.stem,
+                      startrow=9,
+                      index=True,
+                      header=False)
+        
+        # and Ta to row 10
+        df_Ta = pd.DataFrame(data=[],
+                            columns=list(self.LuT.columns),
+                            index=['Ta'])
+        
+        columns_ordered = list(df_Ta.columns)
+                
+        df_Ta.loc['Ta'] = list(self.LuT.columns)
+        
+        df_Ta = df_Ta.astype('str')
+        df_Ta = df_Ta+','
+        
+        df_Ta['br_o'] = '{'
+        df_Ta['br_c'] = '};'
+
+        columns_ordered =  ['br_o'] + columns_ordered + ['br_c']
+        
+        df_Ta = df_Ta[columns_ordered]
+        
+        df_Ta.to_excel(writer,
+                       sheet_name = xls_path.stem,
+                       startrow=10,
+                       index=True,
+                       header=False)
+        
+        writer.save()
+            
     def LuT_from_HTPAxls(self,sheet_name):
               
         xls_path = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
@@ -1216,3 +1317,17 @@ class LuT:
         
         pass
             
+    def _init_xlswriter(self,path):
+        
+        # Load or create workbook
+        writer = pd.ExcelWriter(path, engine='openpyxl')
+        writer.book.create_sheet(title=path.stem)
+        
+        # book = openpyxl.Workbook(path)
+        
+        ## ExcelWriter for some reason uses writer.sheets to access the sheet.
+        ## If you leave it empty it will not know that sheet Main is already there
+        ## and will create a new sheet.
+        # writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+        
+        return writer
