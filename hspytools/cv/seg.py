@@ -220,7 +220,7 @@ class Seg():
             os.remove(file_path)
         
                 
-        plt.savefig(file_path)
+        plt.savefig(file_path,format='png')
         plt.close(fig)
         
         # Change backend to show figures again
@@ -239,11 +239,15 @@ class Seg():
             
                 # In this case the algorithm does not work robustly
                 # ask user to decide
+                vmin = min(np.nanmin(img_below),np.nanmin(img_above))
+                vmax = max(np.nanmax(img_below),np.nanmax(img_above))
+                
                 fig,ax = plt.subplots(1,2)
-                ax[0].imshow(img_below)
+                ax[0].imshow(img_below,vmin=vmin,vmax=vmax)
                 ax[0].set_title('below threshold')
-                ax[1].imshow(img_above)
+                im_a = ax[1].imshow(img_above,vmin=vmin,vmax=vmax)
                 ax[1].set_title('above threshold')
+                fig.colorbar(im_a)
                 fig.show()
                 plt.pause(10E-2)
                 
