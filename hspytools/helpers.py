@@ -11,6 +11,7 @@ from pathlib import Path
 import matplotlib
 import os
 import openpyxl 
+import matplotlib.pyplot as plt
 # import imageio_ffmpeg
 
 
@@ -1306,14 +1307,24 @@ class LuT:
         
     def plot_LuT(self):
         
-        # LuT = self.LuT
+        LuT = self.LuT
         
-        # fig = plt.figure()
-        # ax = fig.add_subplot(111, projection='3d')
-        # ax.scatter(LuT['Tamb'], Ud_grid, To_pred.values.reshape(Ta_grid.shape))
-        # ax.set_xlabel('Tamb0')
-        # ax.set_ylabel('Ud')
-        # ax.set_zlabel('To_pred')
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        
+        X = np.array(LuT.columns).reshape((1,-1))
+        X = np.repeat(X,len(LuT),axis=0)
+        
+        Y = np.array(LuT.index).reshape((-1,1))
+        Y = np.repeat(Y,len(LuT.columns),axis=1)
+        
+        Z = LuT.values
+        
+                
+        ax.plot_surface(X,Y,Z,cmap=matplotlib.cm.coolwarm,antialiased=False)
+        ax.set_xlabel('Tamb0')
+        ax.set_ylabel('Ud')
+        ax.set_zlabel('To_pred')
         
         pass
             
@@ -1322,12 +1333,5 @@ class LuT:
         # Load or create workbook
         writer = pd.ExcelWriter(path, engine='openpyxl')
         writer.book.create_sheet(title=path.stem)
-        
-        # book = openpyxl.Workbook(path)
-        
-        ## ExcelWriter for some reason uses writer.sheets to access the sheet.
-        ## If you leave it empty it will not know that sheet Main is already there
-        ## and will create a new sheet.
-        # writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
         
         return writer
