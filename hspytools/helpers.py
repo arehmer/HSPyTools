@@ -1110,7 +1110,7 @@ class LuT:
         df_V.loc['V'] = LuT['Ud_norm'].values.astype(int)
         
         df_V = df_V.astype('str')
-        df_V = df_V+','
+        df_V[df_V.columns[:-1]] = df_V[df_V.columns[:-1]]+','
         
         df_V['br_o'] = '{'
         df_V['br_c'] = '};'
@@ -1134,8 +1134,11 @@ class LuT:
                 
         df_Ta.loc['Ta'] = list(self.LuT.columns)
         
+
+        
         df_Ta = df_Ta.astype('str')
-        df_Ta = df_Ta+','
+        df_Ta[df_Ta.columns[:-1]] = df_Ta[df_Ta.columns[:-1]]+','
+
         
         df_Ta['br_o'] = '{'
         df_Ta['br_c'] = '};'
@@ -1230,7 +1233,7 @@ class LuT:
                 
         return data
         
-    def eval_LuT(self,data,Ta_col,Ud_col):
+    def eval_LuT(self,data,Ta_col='Tamb0',Ud_col='Ud'):
         
         LuT = self.LuT
         
@@ -1252,12 +1255,12 @@ class LuT:
             rect_pnts = LuT.loc[Ud_row:Ud_row_n,[LuT_col,Ta_col_n]]
             
             data.loc[meas,'To_LuT'] = \
-                self.get_To(rect_pnts,Ta_meas,Ud)
+                self._get_To(rect_pnts,Ta_meas,Ud)
                 
         return data
         
         
-    def get_To(self,points,Ta_meas,Ud_meas):
+    def _get_To(self,points,Ta_meas,Ud_meas):
         
         x0 = points.columns[0]
         x1 = points.columns[1]
@@ -1273,9 +1276,9 @@ class LuT:
             
         rect_pnts = np.array([pt1,pt2,pt3,pt4])
         
-        return self.bilinear_interpolation(Ta_meas,Ud_meas,rect_pnts)
+        return self._bilinear_interpolation(Ta_meas,Ud_meas,rect_pnts)
         
-    def bilinear_interpolation(self,x, y, points):
+    def _bilinear_interpolation(self,x, y, points):
         '''Interpolate (x,y) from values associated with four points.
     
         The four points are a list of four triplets:  (x, y, value).

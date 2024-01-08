@@ -6,7 +6,7 @@ Created on Wed Jun 21 11:31:05 2023
 """
 
 import numpy as np
-
+import matplotlib.pyplot as plt
                       
 class Otsu():
     
@@ -35,7 +35,14 @@ class Otsu():
     @mask.setter
     def mask(self,mask):
         self._mask = mask
-    
+
+    def _moving_average(self,criteria,n=2):
+        ret = np.cumsum(criteria, dtype=float)
+        ret[n:] = ret[n:] - ret[:-n]
+        ret[n - 1:] = ret[n - 1:] / n
+        
+        return ret
+        
     def threshold(self,img):
         
         # Otsu thresholding only works for positive pixel intensities
@@ -55,10 +62,36 @@ class Otsu():
                                 int(np.nanmax(img_off))+1)
         
         criterias = [self._1d_otsu(img_off, th) for th in threshold_range]
-        
+        plt.figure()
+        plt.plot(criterias)
         if self.q == 100:
+            
+            # There might exist mutliple local minima! Espeacially in more
+            # noisy images. Search for all local minima
+            criterias = np.array(criterias).astype(int)
+            
+            # Throw out identical criteria values
+            idx = ~(criterias[0:-1] == criterias[1::])
+            
+            threshold_range = np.array(threshold_range)[:-1][idx]
+            criterias = criterias[:-1][idx]
+            
+            # Smooth critera using moving average
+            criterias = self._moving_average(criterias)
+            
+            
+            # Find local minimum on smoothed curve
+            loc_min = np.where(((criterias[1::]<=criterias[0:-1])[:-1]) &\
+                               ((criterias[0:-1]<=criterias[1::])[1::]))[0]
+            
+            # If multiple local minima exist, take the furthest to the right
+            # Compensate for the index shift in the previous line by adding 1
+            loc_min = max(loc_min) + 1
+            
             # best threshold is the one minimizing the Otsu criteria
-            best_threshold = threshold_range[np.argmin(criterias)]
+            best_threshold = threshold_range[loc_min]
+            
+            
         else:
             # Tweak on Otsu's method to lower the threshold systematically
             criterias = np.array(criterias)
