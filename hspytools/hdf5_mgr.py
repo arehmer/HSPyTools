@@ -270,14 +270,18 @@ class hdf5_mgr():
         
         return pd.read_hdf(self._hdf5_path, address)
     
-    def load_meas(self,meas_name,**kwargs):
+    def load_meas(self,idx,**kwargs):
 
-        appendix = kwargs.pop('appendix','')
+        # Get adresses
+        df_index = self.load_index()
+        address = df_index.loc[idx,'address']
         
-        address = 'meas/' + meas_name
+        # appendix = kwargs.pop('appendix','')
+        
+        # address = 'meas/' + meas_name
 
         # Load and return specified video sequence
-        return pd.read_hdf(self._hdf5_path, address + '/data' + appendix)
+        return pd.read_hdf(self._hdf5_path, address + '/data')
     
     def load_LuT(self,lut_name):
         
