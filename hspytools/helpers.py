@@ -1155,15 +1155,15 @@ class LuT:
         
         writer.save()
             
-    def LuT_from_HTPAxls(self,sheet_name):
+    def LuT_from_HTPAxls(self,sheet_name,**kwargs):
               
         xls_path = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
         
-        index_col = 0
-        usecols = 'A,D:O'
-        skiprows = 17
-        header = 0
-        dtype = 'object'
+        index_col = kwargs.pop('index_col',0)
+        usecols = kwargs.pop('usecols','A,D:O')
+        skiprows = kwargs.pop('skiprows',17)
+        header = kwargs.pop('header',0)
+        # dtype = kwargs.pop('dtype','object')
         
         df = pd.read_excel(xls_path,
                            sheet_name = sheet_name,

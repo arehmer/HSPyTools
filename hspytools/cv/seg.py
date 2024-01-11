@@ -309,21 +309,12 @@ class WatershedSeg(Seg):
     
     def _get_foreground(self,img,d_lim):
         
-        # Use closing (dilation+erosion) on the background to carve out the
-        # foreground better
-        # img_fg = cv2.morphologyEx(img,cv2.MORPH_CLOSE,
-        #                             self.morph_kernel,
-        #                             iterations = 1)
 
         # Use opening (+) on the foreground to carve out the
         # foreground better
         img_fg = cv2.morphologyEx(255-img,cv2.MORPH_OPEN,
                                     self.morph_kernel,
                                     iterations = 1)
-        
-        # img_fg = cv2.erode(img_fg,
-        #                    self.morph_kernel,
-        #                    iterations=1)
         
         # Apply distance transformation
         img_fg = cv2.distanceTransform(255-img_fg, cv2.DIST_L2, 3)
@@ -345,18 +336,6 @@ class WatershedSeg(Seg):
         
         img_orig = img.copy()
         
-        # # Normalize image
-        # img = np.uint16(img)
-
-        # img = cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
-        
-        # # Sharpen image to detect edges better
-        # img_sharp = self._sharpen_img(img)
-               
-        # _,img_above = self.thresholder.threshold(img_sharp)
-        # img_above[~np.isnan(img_above)] = 0
-        # img_above[np.isnan(img_above)] = 255
-        # img_thresh = np.uint8(img_above)
         # Threshold the image, once the original image and once a sharpened 
         # version
         img_thresh = self._threshold_frame(img,sharpen=False)
@@ -364,24 +343,7 @@ class WatershedSeg(Seg):
         
         img_preproc = [img_thresh,img_thresh_sh]
         
-        # Use closing (dilation+erosion) on the background to carve out the
-        # foreground better
-        # img_dist = cv2.morphologyEx(img_thresh,cv2.MORPH_CLOSE,
-        #                           self.morph_kernel,
-        #                           iterations = 1)
         
-        # Apply distance transformation
-        # img_dist = cv2.distanceTransform(img_dist, cv2.DIST_L2, 3)
-        
-        # Depending on the threshold the bounding box that contains the 
-        # proposed object needs to be adapted a little:
-        # if d=0 only pixels that are nonzero themselves are kept so ideally 
-        # the segmented pixel should represent object perfectly -> no frame 
-        # needed
-        # if d=1 also pixels that are nonzero themselves but have a zero
-        # neighbour are kept. This fills tiny gaps but also thickens the 
-        # object by one pixel in all direction -> negative frame of -1
-        # needed. 
         pix_frame = {0:1,1:0,2:-1,3:-2}
         
         proposed_boxes = []
