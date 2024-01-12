@@ -190,8 +190,8 @@ class Seg():
         matplotlib.use('Agg')
         
         # Get maximum and minimum of data for scaling purposes
-        vmin = img.min()
-        vmax = img.max()
+        vmin = np.nanmin(img)
+        vmax = np.nanmax(img)
         
         # Plot as visual control
         plt.ioff()

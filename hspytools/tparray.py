@@ -266,7 +266,10 @@ class TPArray():
             bccData = np.reshape(bccData, (512, 16))
         elif (self._size[0] == 60) and (self._size[1] == 84):
             bccData = np.reshape(bccData, (2048, 16))
-        
+        elif (self._size[0] == 80) and (self._size[1] == 64):
+            bccData = np.reshape(bccData, (2048, 16))
+        else:
+            Exception('import_BCC needs to be updated to handle this array type!')
         ##########################################################
         # calculate all numbers from individual EEPROM addresses #
         ##########################################################

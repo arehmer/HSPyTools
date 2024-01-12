@@ -85,7 +85,12 @@ class Otsu():
         
         # If multiple local minima exist, take the furthest to the right
         # Compensate for the index shift in the previous line by adding 1
-        loc_min = max(loc_min) + 1
+        if len(loc_min)!=0:
+            loc_min = max(loc_min) + 1
+        else:
+            # If no minimum can be found, set threshold to maximum range value
+            # i.e. threshold is highest pixel value in image
+            loc_min = len(threshold_range) - 1
         
         if self.q == 100:
             
