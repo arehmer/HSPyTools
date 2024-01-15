@@ -10,6 +10,7 @@ import os
 
 import numpy as np
 import pandas as pd
+import pickle as pkl
 
 import matplotlib
 
@@ -265,15 +266,26 @@ class Seg():
                     foreground_picked = True
                 
         return img_thresh
-        
+
+
 class WatershedSeg(Seg):
     
-    def __init__(self,w,h,**kwargs):
+    def __init__(self,**kwargs):
+        
+        init_dict =  kwargs.pop('init_dict',None)
+        
+        if init_dict is not None:
+            attr_dict = init_dict
+        else:
+            attr_dict = kwargs
         
         
-        self.bbox_sizelim = kwargs.pop('bbox_sizelim',(4,30)) 
+        self.w = attr_dict.pop('w',None)
+        self.h = attr_dict.pop('h',None)
         
-        self.thresholder = Otsu(**kwargs)
+        self.bbox_sizelim = attr_dict.pop('bbox_sizelim',(4,30)) 
+        
+        self.thresholder = Otsu(**attr_dict)
         Warning('Remove thresholder and border in future releases!')
         Warning('Background mean set constant here. Delete background!')
         
@@ -287,7 +299,27 @@ class WatershedSeg(Seg):
         
         self.dist_thresh = [0,1,2]
         
-        super().__init__(w,h,**kwargs)
+        super().__init__(self.w,self.h,**attr_dict)
+        
+    def save(self,folder:Path):
+        '''
+        Returns all non-private an non-builtin attributes of this class
+        as a dictionary with the purpose of reloading this instance from the
+        attribute dictionary. 
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        attr_dict = { k:v for k,v in vars(self).items() if not k.startswith('_') }
+        
+        
+        save_path = folder / 'WatershedSeg.prop_engine'
+        pkl.dump(attr_dict,open(save_path,'wb'))
+        
+        return attr_dict
     
     def _threshold_frame(self,img,sharpen):
         
@@ -301,20 +333,19 @@ class WatershedSeg(Seg):
             img = self._sharpen_img(img)
                 
         _,img_above = self.thresholder.threshold(img)
-        img_above[~np.isnan(img_above)] = 0
-        img_above[np.isnan(img_above)] = 255
+        img_above[~np.isnan(img_above)] = 255 #0
+        img_above[np.isnan(img_above)] = 0 #255
         img_thresh = np.uint8(img_above)
         
         return img_thresh
     
     def _get_foreground(self,img,d_lim):
-        
 
         # Use opening (+) on the foreground to carve out the
         # foreground better
-        img_fg = cv2.morphologyEx(255-img,cv2.MORPH_OPEN,
-                                    self.morph_kernel,
-                                    iterations = 1)
+        img_fg = cv2.morphologyEx(img,cv2.MORPH_OPEN,
+                                  self.morph_kernel,
+                                  iterations = 1)
         
         # Apply distance transformation
         img_fg = cv2.distanceTransform(255-img_fg, cv2.DIST_L2, 3)
@@ -357,9 +388,9 @@ class WatershedSeg(Seg):
                 
                 
                 # Get the background by dilating the foreground
-                img_bg = cv2.dilate(255-img_pp,
-                                   self.morph_kernel,
-                                   iterations=2)
+                img_bg = cv2.dilate(img_pp,
+                                    self.morph_kernel,
+                                    iterations=2)
 
                 
                 # By calculating the difference between background and foreground
@@ -413,7 +444,12 @@ class WatershedSeg(Seg):
                                                 pix_frame = pix_frame[d])
             
                 proposed_boxes.append(bboxes)
-            
+        
+        # Due to a future warning of pandas, empty dataframes have to be 
+        # deleted before concatenation
+        proposed_boxes = [boxes for boxes in proposed_boxes \
+                          if len(boxes)!=0]
+        
         # Concatenate
         bboxes = pd.concat(proposed_boxes)
         
