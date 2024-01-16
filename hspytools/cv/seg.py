@@ -341,7 +341,7 @@ class WatershedSeg(Seg):
     
     def _get_foreground(self,img,d_lim):
 
-        # Use opening (+) on the foreground to carve out the
+        # Use closing on the foreground to carve out the
         # foreground better
         img_fg = cv2.morphologyEx(img,cv2.MORPH_OPEN,
                                   self.morph_kernel,
@@ -1201,7 +1201,7 @@ class SelectiveSearch(Seg):
         'ybr':int,'bg_mean':int})
         
         # Sort by fill ratio
-        bboxes = bboxes.sort_values('fill_ratio',axis=0,ascending=False)
+        # bboxes = bboxes.sort_values('fill_ratio',axis=0,ascending=False)
         
         # Delete duplicates
         idx_dupl = bboxes[['xtl','ytl','xbr','ybr']].duplicated()
