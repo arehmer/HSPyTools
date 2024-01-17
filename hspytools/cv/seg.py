@@ -641,7 +641,7 @@ class OtsuSeg(Seg):
         
         self.agg_clust = AgglomerativeClustering(n_clusters=None,
                                                  distance_threshold = 2,
-                                                 affinity = 'manhattan',
+                                                 metric = 'manhattan',
                                                  linkage = 'single' )
         
         self.kernel_size =  kwargs.pop('conv_filter_size',3)
