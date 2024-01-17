@@ -57,13 +57,14 @@ class Otsu():
         # Consider only non nan values 
         img_off = img_off[~np.isnan(img_off)].flatten()
         
-        # testing all thresholds from 0 to the maximum of the image
+        # testing all thresholds from the minimum to the maximum of the image
         threshold_range = range(int(np.nanmin(img_off)+1),
                                 int(np.nanmax(img_off))+1)
-        
+
+
+        # In all other cases apply Otu's method as usual
         criterias = [self._1d_otsu(img_off, th) for th in threshold_range]
 
-        # if self.q == 100:
             
         # There might exist mutliple local minima! Espeacially in more
         # noisy images. Search for all local minima
@@ -73,62 +74,50 @@ class Otsu():
         idx = ~(criterias[0:-1] == criterias[1::])
         
         threshold_range = np.array(threshold_range)[:-1][idx]
-        criterias = criterias[:-1][idx]
         
-        # Smooth critera using moving average
-        criterias = self._moving_average(criterias)
+        # if at this point threshold_range is empty, do set the threshold :
+        # equal to the images minimum, i.e. do not threshold the image at all
+        if len(threshold_range) != 0:
         
-        
-        # Find local minimum on smoothed curve
-        loc_min = np.where(((criterias[1::]<=criterias[0:-1])[:-1]) &\
-                           ((criterias[0:-1]<=criterias[1::])[1::]))[0]
-        
-        # If multiple local minima exist, take the furthest to the right
-        # Compensate for the index shift in the previous line by adding 1
-        if len(loc_min)!=0:
-            loc_min = max(loc_min) + 1
+            criterias = criterias[:-1][idx]
+            
+            # Smooth critera using moving average
+            criterias = self._moving_average(criterias)
+            
+            
+            # Find local minimum on smoothed curve
+            loc_min = np.where(((criterias[1::]<=criterias[0:-1])[:-1]) &\
+                               ((criterias[0:-1]<=criterias[1::])[1::]))[0]
+            
+            # If multiple local minima exist, take the furthest to the right
+            # Compensate for the index shift in the previous line by adding 1
+            if len(loc_min)!=0:
+                loc_min = max(loc_min) + 1
+            else:
+                # If no minimum can be found, set threshold to maximum range value
+                # i.e. threshold is highest pixel value in image
+                # if len(threshold_range) == 0:
+                #     print('debug')
+                loc_min = len(threshold_range) - 1
+            
+            if self.q == 100:
+                                # best threshold is the one minimizing the Otsu criteria
+                best_threshold = threshold_range[loc_min]
+                
+            else:
+                
+                criterias = criterias[0:loc_min+1]
+                
+                # calculate q-th percentile of calculated minimum
+                percentile = -np.percentile(-criterias,self.q)
+                
+                # Find value closest to that percentile
+                best_threshold = \
+                    threshold_range[np.argmin(abs(criterias-percentile))]
+            
         else:
-            # If no minimum can be found, set threshold to maximum range value
-            # i.e. threshold is highest pixel value in image
-            loc_min = len(threshold_range) - 1
+            best_threshold = int(np.nanmin(img_off))
         
-        if self.q == 100:
-            
-            # best threshold is the one minimizing the Otsu criteria
-            best_threshold = threshold_range[loc_min]
-            
-        else:
-            
-            criterias = criterias[0:loc_min+1]
-            
-            # calculate q-th percentile of calculated minimum
-            percentile = -np.percentile(-criterias,self.q)
-            
-            # Find value closest to that percentile
-            best_threshold = \
-                threshold_range[np.argmin(abs(criterias-percentile))]
-            
-            
-            
-            
-            
-            
-            
-        # else:
-        #     # Tweak on Otsu's method to lower the threshold systematically
-        #     criterias = np.array(criterias)
-            
-        #     # First get rid of all criteria value above the optimal threshold
-        #     # according to Otsu
-        #     criterias = -criterias[0:np.argmin(criterias)+1]
-            
-        #     # Then calculate the q-th percentile
-        #     percentile = np.percentile(criterias,self.q)
-            
-        #     # Find the value closest to that percentile and define it as the 
-        #     # threshold
-        #     best_threshold = threshold_range[np.argmin(abs(criterias-percentile))]
-            
         # Compensate for offset
         best_threshold = best_threshold - offset
         
