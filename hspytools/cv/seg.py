@@ -283,7 +283,10 @@ class WatershedSeg(Seg):
         self.w = attr_dict.pop('w',None)
         self.h = attr_dict.pop('h',None)
         
-        self.bbox_sizelim = attr_dict.pop('bbox_sizelim',(4,30)) 
+        self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
+                                                          'w_max':18,
+                                                          'h_min':10,
+                                                          'h_max':30}) 
         
         self.thresholder = Otsu(**attr_dict)
         Warning('Remove thresholder and border in future releases!')
@@ -495,14 +498,16 @@ class WatershedSeg(Seg):
 
         """
         
-        min_size = self.bbox_sizelim[0]
-        max_size = self.bbox_sizelim[1]
-        
+        w_min = self.bbox_sizelim['w_min']
+        w_max = self.bbox_sizelim['w_max']
+        h_min = self.bbox_sizelim['h_min']
+        h_max = self.bbox_sizelim['h_max']
+ 
         # Filter out boxes that are above or below a certain size 
-        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=min_size]
-        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=min_size]
-        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=max_size]
-        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=max_size]        
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=w_min]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=h_min]
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=w_max]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=h_max]        
         
         return bboxes
   
@@ -908,14 +913,16 @@ class Kmeans(Seg):
 
         """
         
-        min_size = self.bbox_sizelim[0]
-        max_size = self.bbox_sizelim[1]
-        
+        w_min = self.bbox_sizelim['w_min']
+        w_max = self.bbox_sizelim['w_max']
+        h_min = self.bbox_sizelim['h_min']
+        h_max = self.bbox_sizelim['h_max']
+ 
         # Filter out boxes that are above or below a certain size 
-        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=min_size]
-        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=min_size]
-        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=max_size]
-        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=max_size]        
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=w_min]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=h_min]
+        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=w_max]
+        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=h_max]        
         
         return bboxes
         

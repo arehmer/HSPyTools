@@ -396,23 +396,59 @@ class Byte_Stream_Converter():
         self.width = width
         self.height = height
         
-    def bytes_to_img(self,byte_stream):
+        self.tparray = TPArray(width,height)
+
+    def bytes_to_df(self,byte_stream:list):
         
-             
-        # Loop over all bytes and combine MSB and LSB
-        idx = np.arange(0,len(byte_stream),2)
+        if not isinstance(byte_stream, list):
+            TypeError('byte_stream needs to be a list of bytes')
         
-        img = np.zeros((1,self.width*self.height))
+        # Get the column headers for this array type
+        data_cols = self.tparray.get_serial_data_order()
+        
+        # Create an empty image of appropriate size
+        data = np.zeros((len(data_cols)))
+        
         j=0
         
-        for i in idx:    
-            img[0,j] = int.from_bytes(byte_stream[i:i+2], byteorder='little')
-            j = j+1
+        # Loop over all elements / packages in list
+        for package in byte_stream:
             
-        img = img.reshape((self.height,self.width))
-        img = np.flip(img,axis=1)
+            # Loop over all bytes and combine MSB and LSB
+            idx = np.arange(0,len(package),2)
+            
+            for i in idx:    
+                data[0,j] = int.from_bytes(package[i:i+2], byteorder='little')
+                j = j+1
         
-        return img
+        # Write the data into a dataframe in the appropriate order
+        columns = self.tparray.get_serial_data_order()
+        
+        Warning("Check if pixels are in appropriate order (i.e. if Bodo's)"+\
+                "and pyplots/opencvs coordinate system are the same")
+        data = pd.DataFrame(data = data,
+                            columns = data_cols)
+        
+        
+        return data
+        
+    # def bytes_to_img(self,byte_stream):
+        
+             
+    #     # Loop over all bytes and combine MSB and LSB
+    #     idx = np.arange(0,len(byte_stream),2)
+        
+    #     img = np.zeros((1,self.width*self.height))
+    #     j=0
+        
+    #     for i in idx:    
+    #         img[0,j] = int.from_bytes(byte_stream[i:i+2], byteorder='little')
+    #         j = j+1
+            
+    #     img = img.reshape((self.height,self.width))
+    #     img = np.flip(img,axis=1)
+        
+    #     return img
         
 
 class QuadriPolygon():
