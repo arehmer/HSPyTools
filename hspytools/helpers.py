@@ -10,8 +10,10 @@ import numpy as np
 from pathlib import Path
 import matplotlib
 import os
+import socket
 import openpyxl 
 import matplotlib.pyplot as plt
+import re
 # import imageio_ffmpeg
 
 
@@ -390,7 +392,7 @@ class HTPAdGUI_FileReader():
         return df_video
                
  
-class Byte_Stream_Converter():
+class HTPA_ByteStream_Reader():
     def __init__(self,width,height):
         
         self.width = width
@@ -414,20 +416,22 @@ class Byte_Stream_Converter():
         # Loop over all elements / packages in list
         for package in byte_stream:
             
+            # Read the first byte, it's the package index
+            package_index = package[0]
+            
             # Loop over all bytes and combine MSB and LSB
-            idx = np.arange(0,len(package),2)
+            idx = np.arange(1,len(package),2)
             
             for i in idx:    
-                data[0,j] = int.from_bytes(package[i:i+2], byteorder='little')
+                data[j] = int.from_bytes(package[i:i+2], byteorder='little')
                 j = j+1
-        
-        # Write the data into a dataframe in the appropriate order
-        columns = self.tparray.get_serial_data_order()
-        
+       
         Warning("Check if pixels are in appropriate order (i.e. if Bodo's)"+\
                 "and pyplots/opencvs coordinate system are the same")
-        data = pd.DataFrame(data = data,
-                            columns = data_cols)
+        
+            # Write the data into a dataframe in the appropriate order
+        data = pd.DataFrame(data = [data],
+                        columns = data_cols)
         
         
         return data
@@ -1374,3 +1378,328 @@ class LuT:
         writer.book.create_sheet(title=path.stem)
         
         return writer
+    
+class HTPA_UDP_Reader():
+    
+    def __init__(self,width,height):
+        
+        self.width = width
+        self.height = height
+
+        # Initialize a TPArray object, which contains all information regarding
+        # how data is stored and organized for this array type
+        self._tparray = TPArray(width,height)
+    
+        self._port = 30444
+        
+        # Create a DataFrame to store all bound devices in
+        self.col_dict = {'IP':str,'MAC-ID':str,'Arraytype':int,
+                         'status':str}
+        self.index = pd.Index(data=[],dtype=int,name='DevID')
+        
+        self._devices = pd.DataFrame(data=[],
+                                    columns = self.col_dict.keys(),
+                                    index = self.index)
+        
+        self._sockets = {}
+    
+        # Initialize ByteStream Reader for convertings bytes to pandas
+        # dataframes
+        self.bytestream_reader = HTPA_ByteStream_Reader(width,height)
+        
+    
+    @property
+    def port(self):
+        return self._port
+    @property
+    def tparray(self):
+        return self._tparray
+    
+    @property
+    def devices(self):
+        return self._devices
+    @devices.setter
+    def devices(self,df):
+        devices_old = self._devices
+        self._devices = pd.concat(devices_old,df)
+
+    @property
+    def sockets(self):
+        return self._sockets
+    @sockets.setter
+    def sockets(self,socket:dict):
+        self._sockets.update(socket)
+
+    
+    def broadcast(self):
+        Warning('Not implemented yet.')
+        return None
+    
+    def bind_tparray(self,ip:str):
+        """
+        Creates a socket for the device with the given ip
+
+        Parameters
+        ----------
+        ip : int
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        # Create the udp socket
+        udp_socket = socket.socket(socket.AF_INET,          # Internet
+                                   socket.SOCK_DGRAM)       # UDP
+        
+        # Create server address
+        server_address = (ip,self._port)
+        
+        # Set timeout to 1 second
+        socket.setdefaulttimeout(1)
+        
+        # Try calling the device and check if it's a HTPA device
+        try:
+            _ = udp_socket.sendto(bytes('Calling HTPA series devices',
+                                        'utf-8'),
+                                       server_address)
+            call = udp_socket.recv(self.tparray._package_size)
+        except:
+            Exception('Calling HTPA series device failed')
+            return None
+        
+        # If calling was successfull, extract basic information from the 
+        # answer string
+        dev_info = self._callstring_to_information(call)
+        
+        # Next try to bind the device
+        try:
+            _ = udp_socket.sendto(bytes('Bind HTPA series device',
+                                        'utf-8'),
+                                       server_address)
+            bind = udp_socket.recv(self.tparray._package_size)
+        except:
+            Exception('Calling HTPA series device failed')
+            return None
+        
+        dev_info['status'] = 'bound'
+        
+        # Add socket to dictionary
+        dev_id = dev_info.index.item()
+        self.sockets = {dev_id:udp_socket}
+        
+        # Append new device to device list and store
+        self._devices = dev_info
+        
+        return self.devices.copy()
+
+    def release_tparray(self,dev_id):
+        
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+            
+            # Get udp socket
+            udp_socket = self.sockets[dev_id]
+            
+            # Create the udp socket
+            # udp_socket = socket.socket(socket.AF_INET,          # Internet
+            #                            socket.SOCK_DGRAM)       # UDP
+            
+            # Set timeout to 1 second
+            # socket.setdefaulttimeout(1)
+            
+            # Create server address
+            server_address = (dev_info['IP'].item(), self.port)
+            
+            # Send message to device to stop streaming bytes
+            _ = udp_socket.sendto(bytes('x','utf-8'),server_address)
+    
+    def start_continuous_bytestream(self,dev_id):
+        
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+        
+        # Get udp socket
+        udp_socket = self.sockets[dev_id]
+        
+        # Create the udp socket
+        # udp_socket = socket.socket(socket.AF_INET,          # Internet
+        #                            socket.SOCK_DGRAM)       # UDP
+        
+        # Set timeout to 1 second
+        # socket.setdefaulttimeout(1)
+        
+        # Create server address
+        server_address = (dev_info['IP'].item(), self.port)
+        
+        # Connect socket to address
+        # connect = udp_socket.connect(server_address)
+        
+        # Send message to device to start streaming bytes
+        _ = udp_socket.sendto(bytes('K','utf-8'),server_address)
+
+    def stop_continuous_bytestream(self,dev_id):
+        
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+        
+        # Get udp socket
+        udp_socket = self.sockets[dev_id]
+        
+        # Create the udp socket
+        # udp_socket = socket.socket(socket.AF_INET,          # Internet
+        #                            socket.SOCK_DGRAM)       # UDP
+        
+        # Set timeout to 1 second
+        # socket.setdefaulttimeout(1)
+        
+        # Create server address
+        server_address = (dev_info['IP'].item(), self.port)
+        
+        # Connect socket to address
+        # udp_socket.connect(server_address)
+        
+        # Send message to device to start streaming bytes
+        _ = udp_socket.sendto(bytes('X','utf-8'),server_address)        
+        
+        return None
+    
+    def read_continuous_bytestream(self,dev_id):
+        
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+        
+        # Get udp socket
+        udp_socket = self.sockets[dev_id]
+        
+        # Create the udp socket
+        # udp_socket = socket.socket(socket.AF_INET,          # Internet
+        #                            socket.SOCK_DGRAM)       # UDP
+        
+        # Set timeout to 1 second
+        # socket.setdefaulttimeout(1)
+        
+        # Create server address
+        server_address = (dev_info['IP'].item(), self.port)
+        
+        # _ = udp_socket.sendto(bytes('K','utf-8'),server_address)
+        
+        # Connect socket to address
+        # connect = udp_socket.connect(('192.168.240.144', 58495))
+        
+
+        
+        # Create variable that indicates if DataFrame was constructed success-
+        # fully
+        success = False
+        while success == False:
+            
+            # Initialize list for received packages            
+            packages = []
+            
+            # Read incoming packages until one with the package index 1 is received
+            sync = False
+            
+            while sync == False:
+                
+                # Receive package
+                package = udp_socket.recv(self.tparray._package_size)
+                
+                # Get index of package
+                package_index = int(package[0])
+                
+                # Check if it is equal to 1
+                if package_index == 1:
+                    packages.append(package)
+                    sync = True
+            
+            for p in range(2,self.tparray._package_num+1):
+                
+                # Receive package
+                package = udp_socket.recv(self.tparray._package_size)
+                
+                # Get index of package
+                package_index = int(package[0])
+                
+                # Check if package index has the expected value
+                if package_index == p:
+                    packages.append(package)
+                
+            # In the end check if as many packages were received as expected
+            if len(packages) == self.tparray._package_num:
+                
+                # If yes, pass the packages to the class that parses the
+                # bytes into a pandas dataframe
+                df_frame = self.bytestream_reader.bytes_to_df(packages)
+                success = True
+                
+            else:
+                print('Frame lost.')
+                sync = False
+
+                
+  
+
+        return df_frame
+        
+    def _callstring_to_information(self,call:bytes):
+        """
+        Extracts information from the ridiculously long and inefficient answer
+        to the device call.
+
+        Parameters
+        ----------
+        call : bytes
+            DESCRIPTION.
+
+        Returns
+        -------
+        dev_info : TYPE
+            DESCRIPTION.
+
+        """
+
+        call = call.decode('utf-8')
+        
+        # Extract information from callstring
+        arraytype = int(call.split('Arraytype')[1].split('MODTYPE')[0])
+        mac_id = re.findall(r'\d{2}\.\d{2}\.\w{2}\.\d{2}.\d{2}.\d{2}',call)[0]
+        ip = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}',call)[0]
+        dev_id = int(call.split('DevID:')[1].split('Emission')[0])
+        
+                
+        dev_info = pd.DataFrame(data = [],
+                                columns = self.col_dict.keys(),
+                                index = self.index)
+        
+        dev_info.loc[dev_id,['IP','MAC-ID','Arraytype']] = \
+            [ip,mac_id,arraytype]
+        
+        dev_info = dev_info.astype(self.col_dict)    
+        
+        return dev_info
+    
+
+        
+        
+        
+        
+        
+        

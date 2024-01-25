@@ -8,6 +8,7 @@ import numpy as np
 import ctypes
 import pandas as pd
 
+
 class TPArray():
     """
     Class contains hard-coded properties of Thermopile-Arrays relevant
@@ -26,6 +27,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=1
             DevConst['NROFPTAT']=1
+            
+            self._package_num = 1
+            self._package_size = 262
             self._fs = 160
             self._NETD = 100
             
@@ -36,6 +40,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=2
             DevConst['NROFPTAT']=2
+            
+            self._package_num = 1
+            self._package_size = 780
             self._fs = 70
             self._NETD = 130
         
@@ -46,6 +53,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
+            
+            self._package_num = 2
+            self._package_size = 1292
             self._fs = 27
             self._NETD = 140
             
@@ -56,6 +66,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
+            
+            self._package_num = 10
+            self._package_size = 1283
             self._fs = 41
             self._NETD = 70
                       
@@ -66,6 +79,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=6
             DevConst['NROFPTAT']=2
+            
+            self._package_num = 17
+            self._package_size = 1401
             self._fs = 28
             self._NETD = 130
             
@@ -76,6 +92,9 @@ class TPArray():
             DevConst['ATCaddr']=2892
             DevConst['NROFBLOCKS']=5
             DevConst['NROFPTAT']=2
+            
+            self._package_num = 5
+            self._package_size = 1159
             self._fs = 47
             self._NETD = 90
 
@@ -86,6 +105,9 @@ class TPArray():
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=7
             DevConst['NROFPTAT']=2
+            
+            self._package_num = 9
+            self._package_size = 1285
             self._fs = 25
             self._NETD = 110
             
