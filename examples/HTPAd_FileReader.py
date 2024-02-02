@@ -52,10 +52,10 @@ plt.figure('Frame 10')
 plt.imshow(frame10_np)
 
 
-Warning("The origin in the .bds or .txt file is in the upper right " +\
+print("The origin in the .bds or .txt file is in the upper right " +\
         "corner. matplotlib hat its origin in the upper left corner. " +\
         "I.e. the image needs to be flipped on the vertical axis for " +\
-        "proper display")
+        "proper display.")
     
 import numpy as np
 frame10_flipped = np.flip(frame10_np,axis=1)
