@@ -264,7 +264,7 @@ class HTPAdGUI_FileReader():
             path.mkdir(parents=True,exist_ok=False)
         
         for i in df_video.index:
-            img = df_video.loc[i].values.reshape(npsize)
+            img = df_video.loc[[i]].values.reshape(npsize)
 
             
             file_name = str(i) + '.png'
@@ -1109,14 +1109,43 @@ class LuT:
         LuT.index = LuT.index - offset
         
         self.LuT = LuT
+        
+    def LuT_from_xlsx(self,xlsx_path,sheet_name,**kwargs):
+        
+        index_col = kwargs.pop('index_col',0)
+        usecols = kwargs.pop('usecols','A,D:O')
+        skiprows = kwargs.pop('skiprows',12)
+        header = kwargs.pop('header',0)
+        # dtype = kwargs.pop('dtype','object')
+        
+        df = pd.read_excel(xlsx_path,
+                           sheet_name = sheet_name,
+                           skiprows = skiprows,
+                           index_col = index_col,
+                           usecols = usecols,
+                           header = header)
+        
+        # Delete all commata
+        df = df.replace(',','',regex=True)
+        
+        # Cast all columns to int
+        df = df.astype(np.int32)
+        
+        # Rename index
+        df.index.name = 'Ud'
+        
+        # That's it
+        self.LuT = df
+        
+        return None
     
-    def LuT_to_xls(self,xls_path):
+    def LuT_to_xlsx(self,xlsx_path):
         
         # Load LuT
         LuT = self.LuT.copy()
         
         # Initialize writer object
-        writer = self._init_xlswriter(xls_path)
+        writer = self._init_xlswriter(xlsx_path)
         
         # Start a list where columns are in the right order
         columns_ordered = list(LuT.columns)
@@ -1136,7 +1165,7 @@ class LuT:
         LuT = LuT[columns_ordered]
         
         LuT.to_excel(writer,
-                     sheet_name = xls_path.stem,
+                     sheet_name = xlsx_path.stem,
                      startrow=12,
                      index=False)
         
@@ -1160,7 +1189,7 @@ class LuT:
         df_V = df_V[columns_ordered]
         
         df_V.to_excel(writer,
-                      sheet_name = xls_path.stem,
+                      sheet_name = xlsx_path.stem,
                       startrow=9,
                       index=True,
                       header=False)
@@ -1188,7 +1217,7 @@ class LuT:
         df_Ta = df_Ta[columns_ordered]
         
         df_Ta.to_excel(writer,
-                       sheet_name = xls_path.stem,
+                       sheet_name = xlsx_path.stem,
                        startrow=10,
                        index=True,
                        header=False)
@@ -1197,36 +1226,13 @@ class LuT:
             
     def LuT_from_HTPAxls(self,sheet_name,**kwargs):
               
-        xls_path = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
+        xlsx_path = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
         
-        index_col = kwargs.pop('index_col',0)
-        usecols = kwargs.pop('usecols','A,D:O')
-        skiprows = kwargs.pop('skiprows',17)
-        header = kwargs.pop('header',0)
-        # dtype = kwargs.pop('dtype','object')
-        
-        df = pd.read_excel(xls_path,
-                           sheet_name = sheet_name,
-                           skiprows = skiprows,
-                           index_col = index_col,
-                           usecols = usecols,
-                           header = header)
-        
-        # Delete all commata
-        df = df.replace(',','',regex=True)
-        
-        # Cast all columns to int
-        df = df.astype(np.int32)
-        
-        # Rename index
-        df.index.name = 'Ud'
-        
-        # That's it
-        self.LuT = df
+        self.LuT_from_xlsx(xlsx_path,sheet_name,**kwargs)
         
         return None
         
-    def inverse_eval_LuT(self,data,Ta_col,To_col):
+    def inverse_eval_LuT(self,data,Ta_col='Tamb0',To_col='To_meas'):
         
         # Check if index is unique, otherwise loop will exract more than one
         # measurement per loop and algorithm brakes down
