@@ -399,8 +399,12 @@ class HTPA_ByteStream_Reader():
         self.height = height
         
         self.tparray = TPArray(width,height)
-
-    def bytes_to_df(self,byte_stream:list):
+        
+        # Initialize an array to which to write data
+        self.data_cols = self.tparray.get_serial_data_order()
+        self.data = np.zeros((len(self.data_cols)))
+    
+    def bytes_to_np(self,byte_stream:list):
         
         if not isinstance(byte_stream, list):
             TypeError('byte_stream needs to be a list of bytes')
@@ -408,8 +412,8 @@ class HTPA_ByteStream_Reader():
         # Get the column headers for this array type
         data_cols = self.tparray.get_serial_data_order()
         
-        # Create an empty image of appropriate size
-        data = np.zeros((len(data_cols)))
+        # Zero data array
+        self.data.fill(0)
         
         j=0
         
@@ -423,18 +427,23 @@ class HTPA_ByteStream_Reader():
             idx = np.arange(1,len(package),2)
             
             for i in idx:    
-                data[j] = int.from_bytes(package[i:i+2], byteorder='little')
+                self.data[j] = int.from_bytes(package[i:i+2], byteorder='little')
                 j = j+1
        
         Warning("Check if pixels are in appropriate order (i.e. if Bodo's)"+\
                 "and pyplots/opencvs coordinate system are the same")
         
-            # Write the data into a dataframe in the appropriate order
-        data = pd.DataFrame(data = [data],
-                        columns = data_cols)
+        return self.data
+    
+    def bytes_to_df(self,byte_stream:list):
         
+        self.bytes_to_np(byte_stream)
         
-        return data
+        df_data = pd.DataFrame(data=[self.data],
+                               columns=self.data_cols)
+        
+        return df_data
+        
         
     # def bytes_to_img(self,byte_stream):
         
@@ -1653,7 +1662,11 @@ class HTPA_UDP_Reader():
                 
                 # If yes, pass the packages to the class that parses the
                 # bytes into a pandas dataframe
-                df_frame = self.bytestream_reader.bytes_to_df(packages)
+                # df_frame = self.bytestream_reader.bytes_to_df(packages)
+                
+                df_frame = self.bytestream_reader.bytes_to_np(packages)
+                
+                
                 success = True
                 
             else:

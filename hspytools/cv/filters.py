@@ -372,6 +372,147 @@ class AWA():
         filt_video = filt_video[~filt_video.index.duplicated(keep='last')]
         
         return filt_video
+
+class Bilateral_CV():
+    
+    def __init__(self,**kwargs):
+        
+        self.d = int(kwargs.pop('d',3))
+        self.sigmaColor = int(self.d**2)
+        self.sigmaSpace =  int(self.d/2)
+    
+    def filter_img(self,img,idx):
+        
+        img = img.astype(np.float32)
+        
+        filt_img = cv.bilateralFilter(img,
+                                      self.d,
+                                      self.sigmaColor,
+                                      self.sigmaSpace)
+        
+        return filt_img,idx
+    
+class AWA_CV():
+    
+    """
+    Spatio-temporal filter published in Adaptive motion-compensated filtering 
+    of noisy image sequences (Ozkan, 1993)
+    """
+    
+    def __init__(self,width,height,**kwargs):
+        """
+        
+
+        Parameters
+        ----------
+        width: int
+            Width of picture in pixels
+        height: int
+            Height of picture in pixels
+        **kwargs : dict
+            DESCRIPTION.
+        K: int
+            Defines order of temporal support of the filter
+        S: int
+            Defines spatial support of the filter as a frame with size S around
+            the pixel to be filtered
+        a: int
+            Parameter for filter weight
+        eps: int
+            Threshold parameter for filter. Reccomendation from paper: set eps**2 
+                to "two times the value of the noise variance" 
+        Returns
+        -------
+        None.
+
+        """
+        
+        self.width = width
+        self.height = height
+        self.K = kwargs.pop('K',1)
+        self.S = kwargs.pop('S',1)
+
+        self.a = kwargs.pop('a',1)
+        self.eps = kwargs.pop('eps',1)
+    
+        self.initialize_filter()
+    
+    def initialize_filter(self):
+        # Initialize C++ implementation of filter
+        self.awa_filter = cv.htpa.AWA_Filter(self.width,
+                                             self.height, 
+                                             self.K, 
+                                             self.S, 
+                                             self.a, 
+                                             self.eps)
+        
+    def filter_img(self,img,idx):
+        """
+        Calculates the adaptive filter coefficients for each pixel. Right now
+        the calculation is done by looping over the dictionary that contains 
+        the spatial and temporal support indices for each pixel. This comp-
+        utation might be sped up by vectorization
+
+        Parameters
+        ----------
+        XXX : xxx
+            xxxxxxxxx
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        frame,filt_img = self.awa_filter.filter(img,int(idx),img)
+        
+            
+        return filt_img,int(frame)
+    
+    def filter_sequence(self,video):
+        """
+        Filters a whole video sequence given as pandas DataFrame
+        
+
+        Parameters
+        ----------
+        video : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        # Reset buffer        
+        self.initialize_filter()
+
+        # Initialize list for filtered images
+        filt_imgs = []
+        frames = []
+
+        # Loop over video sequence
+        for i in video.index:
+            img = video.loc[i].values.reshape(self.height,self.width)
+            frame,filt_img =  self.filter_img(img,i)
+            filt_img =  filt_img.flatten()
+            
+            filt_imgs.append(filt_img)
+            frames.append(frame)
+        
+        # Convert to DataFrame
+        filt_video = pd.DataFrame(data = filt_imgs,
+                                  columns = video.columns,
+                                  index = frames)
+
+        # The remaining frames in the buffer that have not been filtered are
+        # appended so the overall number of frames remains unchanged
+        filt_video = pd.concat([filt_video,video.iloc[-self.K::]])
+        
+        # Delete frames that appear twice (unfiltered and filtered)
+        filt_video = filt_video[~filt_video.index.duplicated(keep='last')]
+        
+        return filt_video
         
 class Scale:
     

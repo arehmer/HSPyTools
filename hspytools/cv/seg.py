@@ -304,7 +304,7 @@ class WatershedSeg(Seg):
         
         super().__init__(self.w,self.h,**attr_dict)
         
-    def save(self,folder:Path):
+    def save(self):
         '''
         Returns all non-private an non-builtin attributes of this class
         as a dictionary with the purpose of reloading this instance from the
@@ -319,8 +319,8 @@ class WatershedSeg(Seg):
         attr_dict = { k:v for k,v in vars(self).items() if not k.startswith('_') }
         
         
-        save_path = folder / 'WatershedSeg.prop_engine'
-        pkl.dump(attr_dict,open(save_path,'wb'))
+        # save_path = folder / 'WatershedSeg.prop_engine'
+        # pkl.dump(attr_dict,open(save_path,'wb'))
         
         return attr_dict
     
