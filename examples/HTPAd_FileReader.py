@@ -5,12 +5,9 @@ Created on Fri Feb  2 15:56:46 2024
 @author: rehmer
 """
 
-from hspytools import HTPAdGUI_FileReader
+from hspytools.readers import HTPAdGUI_FileReader
 
 from pathlib import Path
-
-
-
 
 # %% path to file as Path object
 file_path = Path.cwd() / 'data_samples' / '32x32L2k1.BDS'
@@ -34,7 +31,7 @@ df,header = reader.read_htpa_video(file_path)
 tparray = reader.tparray
 
 # Alternatively one can initialize a new TParray object:
-from hspytools import TPArray
+from hspytools.tparray import TPArray
 tparray = TPArray(width,height)
 
 # %% Access pixels (all frames):
