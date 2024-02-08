@@ -14,13 +14,16 @@ from hspytools.ipc.threads import UDP,Imshow
 
 
 
-# %%
+# %% Parameters provided by the user
+# Resolution of sensor
 width = 60
 height = 40
 
 # Broadcasting has not been implemented yet, therefore the IP of the HTPA
 # device needs to be known in advance
-# UDP_IP = '192.168.137.110' 
+UDP_IP = '192.168.137.110' 
+
+# %% Code begins here
 
 tparray = TPArray(width, height)
 udp_buffer = Queue(maxsize=1)
