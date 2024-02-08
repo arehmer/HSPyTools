@@ -1700,7 +1700,7 @@ class HTPA_UDP_Reader():
         # Extract information from callstring
         arraytype = int(call.split('Arraytype')[1].split('MODTYPE')[0])
         mac_id = re.findall(r'\d{2}\.\d{2}\.\w{2}\.\d{2}.\d{2}.\d{2}',call)[0]
-        ip = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}',call)[0]
+        ip = re.findall(r'\d{3}\.\d{3}\.\d{3}.\d{3}',call)[0]
         dev_id = int(call.split('DevID:')[1].split('Emission')[0])
         
                 

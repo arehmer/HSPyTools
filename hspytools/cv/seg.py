@@ -46,32 +46,68 @@ class Seg():
         conv_filter[1,1] = 2
         self.lonely_pix_filter.k = conv_filter
     
-    def get_proposals(self,video):
+    def get_proposals(self,**kwargs):
+        """
+        Takes a single frame as np.ndarray or a whole sequence as pd.DataFrame
+        and generates proposals for every frame
+
+        Parameters
+        ----------
+        video : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        bbox_annnot : TYPE
+            DESCRIPTION.
+
+        """
         
-        bbox_annnot = []
+        frame = kwargs.pop('frame',None)
+        image_id = kwargs.pop('image_id',None)
+        video = kwargs.pop('video',None)
         
-        for i in video.index:
-            # Convert row from DataFrame to array
-            frame = video.loc[i].values.reshape((self.h,self.w))
+        
+        
+        # If a single frame is provided, generate proposals for that one
+        if frame is not None:
             
-            # Get bounding boxes
             bbox_frame = self.segment_frame(frame)
             
             # Add a column for the image id
-            bbox_frame['image_id'] = i
+            bbox_frame['image_id'] = image_id
             
-            bbox_annnot.append(bbox_frame)
-        
-        # Concatenate to one large DataFrame
-        bbox_annnot = pd.concat(bbox_annnot)
-        
-        # Reindex so index is unique
-        bbox_annnot = bbox_annnot.reset_index(drop=True)
-        
-        # Name index "id" for compatiblity with all other classes
-        bbox_annnot.index.rename('id',inplace=True)
+            # Name index "id" for compatiblity with all other classes
+            bbox_frame.index.rename('id',inplace=True)
             
-        return bbox_annnot
+            return bbox_frame
+        
+        elif video is not None:
+        
+            bbox_video = []    
+        
+            for i in video.index:
+                # Convert row from DataFrame to array
+                frame = video.loc[i].values.reshape((self.h,self.w))
+                
+                # Get bounding boxes
+                bbox_frame = self.segment_frame(frame)
+                
+                # Add a column for the image id
+                bbox_frame['image_id'] = i
+                
+                bbox_video.append(bbox_frame)
+            
+            # Concatenate to one large DataFrame
+            bbox_video = pd.concat(bbox_video)
+            
+            # Reindex so index is unique
+            bbox_video = bbox_video.reset_index(drop=True)
+            
+            # Name index "id" for compatiblity with all other classes
+            bbox_video.index.rename('id',inplace=True)
+                
+            return bbox_video
     
     def bboxes_from_clust(self,pix_coords,clust_dict,**kwargs):
         """
