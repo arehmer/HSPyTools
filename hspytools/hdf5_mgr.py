@@ -11,7 +11,7 @@ import numpy as np
 import warnings
 import os
 
-from hspytools.helpers import HTPAdGUI_FileReader
+from hspytools.readers import HTPAdGUI_FileReader
 
 class hdf5_mgr():
 
