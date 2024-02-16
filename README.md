@@ -10,7 +10,7 @@ The library was developed using the Anaconda3 distribution of Python 3.11.5. In 
 
 1. Clone this repository either via using the shell
    ```sh
-   git clone https://github.com/arehmer/HSFit.git
+   git clone https://github.com/arehmer/HSPyTools.git
     ```
    or using the GitHub Desktop-App: ```File-->Clone repository ``` <br>
    <img src="images/screenshot1_github_desktop.png"  height="300">

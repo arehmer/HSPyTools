@@ -464,9 +464,11 @@ class AWA_CV():
 
         """
         
-        frame,filt_img = self.awa_filter.filter(img,int(idx),img)
+        img = img.astype(np.float32)
+        filt_img = np.zeros(img.shape)
         
-            
+        frame,filt_img = self.awa_filter.filter(img,int(idx),filt_img)
+        # buffer=self.awa_filter.img_buffer
         return filt_img,int(frame)
     
     def filter_sequence(self,video):
@@ -494,7 +496,7 @@ class AWA_CV():
         # Loop over video sequence
         for i in video.index:
             img = video.loc[i].values.reshape(self.height,self.width)
-            frame,filt_img =  self.filter_img(img,i)
+            filt_img,frame =  self.filter_img(img,i)
             filt_img =  filt_img.flatten()
             
             filt_imgs.append(filt_img)

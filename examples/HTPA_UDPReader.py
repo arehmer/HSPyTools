@@ -21,7 +21,7 @@ height = 40
 
 # Broadcasting has not been implemented yet, therefore the IP of the HTPA
 # device needs to be known in advance
-UDP_IP = '192.168.137.110' 
+UDP_IP = '192.168.137.124' 
 
 # %% Code begins here
 
@@ -36,6 +36,7 @@ udp_thread = UDP(udp_reader = udp_reader,
                         dev_ip = UDP_IP,
                         write_buffer = udp_buffer)
 
+
 # Create instance of thread plotting the reveived data
 plot_thread = Imshow(width = width,
                      height = height,
@@ -48,7 +49,7 @@ if __name__ == '__main__':
     plot_thread.start()
     
     for i in range(1):
-        time.sleep(10)
+        time.sleep(120)
         udp_thread.stop()
         plot_thread.stop()
         

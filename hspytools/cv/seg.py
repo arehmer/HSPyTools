@@ -38,7 +38,7 @@ class Seg():
         self.w = w
         self.h = h
         self.pix_frame = kwargs.pop('pix_frame',1)
-        
+               
         self.lonely_pix_filter = Convolution(mode='same')
         conv_filter = np.zeros((3,3))
         conv_filter[:,1] = 1
@@ -322,9 +322,13 @@ class WatershedSeg(Seg):
         self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
                                                           'w_max':18,
                                                           'h_min':10,
-                                                          'h_max':30}) 
+                                                          'h_max':30})
+        
+        self.dist_thresh = attr_dict.pop('dist_thresh',[0,1,2])
+        
         
         self.thresholder = Otsu(**attr_dict)
+        
         Warning('Remove thresholder and border in future releases!')
         Warning('Background mean set constant here. Delete background!')
         
@@ -336,7 +340,7 @@ class WatershedSeg(Seg):
         
         self.img_seg = {}
         
-        self.dist_thresh = [0,1,2]
+        
         
         super().__init__(self.w,self.h,**attr_dict)
         
@@ -871,12 +875,23 @@ class Kmeans(Seg):
     
     def __init__(self,w,h,**kwargs):
         
+        
+        init_dict =  kwargs.pop('init_dict',None)
+        
+        if init_dict is not None:
+            attr_dict = init_dict
+        else:
+            attr_dict = kwargs
+        
         self.thresholder = Otsu(**kwargs)
-        self.k_max = 5
+        self.k_max = attr_dict.pop('k_max',5) 
         
-        self.bbox_sizelim = kwargs.pop('bbox_sizelim',(4,30)) 
-        
-        super().__init__(w,h,**kwargs)
+        self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
+                                                          'w_max':18,
+                                                          'h_min':10,
+                                                          'h_max':30})
+                
+        super().__init__(w,h,**attr_dict)
     
     def segment_frame(self,img):
         
@@ -1132,17 +1147,28 @@ class SelectiveSearch(Seg):
     
     def __init__(self,w,h,**kwargs):
         
+        init_dict =  kwargs.pop('init_dict',None)
+        
+        if init_dict is not None:
+            attr_dict = init_dict
+        else:
+            attr_dict = kwargs
 
-        self.bbox_lim = kwargs.pop('bbox_lim',(0,np.inf))
+        self.bbox_lim = attr_dict.pop('bbox_lim',(0,np.inf))
         self.hierarch_clust = linkage
         
         self.thresholder = Otsu(**kwargs)
 
         
-        self.linkage_method = kwargs.pop('linkage_method','weighted')
-        self.linkage_metric = kwargs.pop('linkage_metric','euclidean')
+        self.linkage_method = attr_dict.pop('linkage_method','weighted')
+        self.linkage_metric = attr_dict.pop('linkage_metric','euclidean')
         
-        super(SelectiveSearch,self).__init__(w,h,**kwargs)
+        self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
+                                                          'w_max':18,
+                                                          'h_min':10,
+                                                          'h_max':30})
+        
+        super().__init__(w,h,**attr_dict)
         
         # Test if segmentation works with ths method-metric combination
         # Use a random image with uniformly distributed values
