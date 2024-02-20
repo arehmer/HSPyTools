@@ -207,6 +207,18 @@ class TPArray():
             ee['adr_thGrad'][0] = 473
             ee['adr_thOff'][0] = 788
             ee['adr_pij'][0] = 1418
+            
+        elif (width,height) == (60,40):
+            
+            ee['adr_vddCompGrad'][0] = 64
+            ee['adr_vddCompOff'][0] = 68
+            ee['adr_thGrad'][0] = 71
+            ee['adr_thOff'][0] = 90
+            ee['adr_pij'][0] = 109
+            
+        else:
+            raise Exception('Implement EEPROM Map for this array type!')
+            
         
         self._eeprom_adresses = ee
         
@@ -290,8 +302,10 @@ class TPArray():
             bccData = np.reshape(bccData, (2048, 16))
         elif (self._size[0] == 80) and (self._size[1] == 64):
             bccData = np.reshape(bccData, (2048, 16))
+        elif (self._size[0] == 60) and (self._size[1] == 40):
+            bccData = np.reshape(bccData, (2048, 16))
         else:
-            Exception('import_BCC needs to be updated to handle this array type!')
+            raise Exception('import_BCC needs to be updated to handle this array type!')
         ##########################################################
         # calculate all numbers from individual EEPROM addresses #
         ##########################################################
