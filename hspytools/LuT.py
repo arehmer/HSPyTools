@@ -5,6 +5,11 @@ Created on Thu Feb  8 16:11:36 2024
 @author: rehmer
 """
 
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
 class LuT:
     
     def __init__(self,**kwargs):
@@ -207,16 +212,29 @@ class LuT:
         LuT = self.LuT
         
         for meas in data.index:
-    
+                     
             Ta_meas = data.loc[meas,Ta_col]
             Ud = data.loc[meas,Ud_col]
         
             # Find columns and indeces for bilinear interpolation
             col_idx = LuT.columns < Ta_meas
-            LuT_col = LuT.columns[col_idx][-1]
-            Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
             
+            # Check if Ta_meas is outside of the range of the LuT
+            if not all(col_idx==False):
+                LuT_col = LuT.columns[col_idx][-1]
+                Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
+            else:
+                continue
+            
+            # Check if Ud is outside of the range of the LuT
             row_idx = LuT.index < Ud
+            if not all(row_idx==False):
+                LuT_col = LuT.columns[col_idx][-1]
+                Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
+            else:
+                continue
+            
+            
             Ud_row = LuT.index[row_idx][-1]
             Ud_row_n = LuT.index[LuT.index.get_loc(Ud_row)+1]
             

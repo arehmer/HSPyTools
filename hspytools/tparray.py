@@ -210,11 +210,11 @@ class TPArray():
             
         elif (width,height) == (60,40):
             
-            ee['adr_vddCompGrad'][0] = 64
-            ee['adr_vddCompOff'][0] = 68
-            ee['adr_thGrad'][0] = 71
-            ee['adr_thOff'][0] = 90
-            ee['adr_pij'][0] = 109
+            ee['adr_vddCompGrad'][0] = 1028 #64
+            ee['adr_vddCompOff'][0] = 1088 #68
+            ee['adr_thGrad'][0] = 1148 #71
+            ee['adr_thOff'][0] = 1448 #90
+            ee['adr_pij'][0] = 1748 #109
             
         else:
             raise Exception('Implement EEPROM Map for this array type!')
@@ -433,15 +433,8 @@ class TPArray():
                 for j in range(8):
                     thGrad_el[j + 8 * i] = ctypes.c_int16((bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + 2 * j])).value
                     thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
-        # 80x64
-        elif(self._size[0] == 80) and (self._size[1] == 64):
-            for i in range(int(self._size[0] * self._size[1] / 16)):
-                for j in range(16):
-                    thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
-            for i in range(int(self._size[0] * self._size[1] / 8)):
-                for j in range(8):
-                    thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
-        elif(self._size[0] == 60) and (self._size[1] == 84):
+        # All other array types
+        else:
             for i in range(int(self._size[0] * self._size[1] / 16)):
                 for j in range(16):
                     thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
@@ -449,12 +442,35 @@ class TPArray():
                 for j in range(8):
                     thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
         
+        # # 80x64
+        # elif(self._size[0] == 80) and (self._size[1] == 64):
+        #     for i in range(int(self._size[0] * self._size[1] / 16)):
+        #         for j in range(16):
+        #             thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
+        #     for i in range(int(self._size[0] * self._size[1] / 8)):
+        #         for j in range(8):
+        #             thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
+        # # 60x84
+        # elif(self._size[0] == 60) and (self._size[1] == 84):
+        #     for i in range(int(self._size[0] * self._size[1] / 16)):
+        #         for j in range(16):
+        #             thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
+        #     for i in range(int(self._size[0] * self._size[1] / 8)):
+        #         for j in range(8):
+        #             thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
+        # # 60x40
+        # elif(self._size[0] == 60) and (self._size[1] == 40):
+            
+        # else:
+        #     raise Exception('Arraytype not implemented!')
+        
+        
         # sort ThGrad and ThOffset
         thGrad = np.zeros([self._size[1], self._size[0]])
         thOff = np.zeros([self._size[1], self._size[0]])
         m = 0
         n = 0
-            # top half
+        # top half
         for i in range((int)(self._size[0] * self._size[1] / 2)):
             thGrad[m][n] = thGrad_el[i]
             thOff[m][n] = thOff_el[i]
