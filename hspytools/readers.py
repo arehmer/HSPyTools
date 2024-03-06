@@ -384,8 +384,8 @@ class HTPAdGUI_FileReader():
         return df_video
                
  
-class HTPA_ByteStream_Reader():
-    def __init__(self,width,height):
+class HTPA_ByteStream_Converter():
+    def __init__(self,width,height,**kwargs):
         
         self.width = width
         self.height = height
@@ -395,8 +395,18 @@ class HTPA_ByteStream_Reader():
         # Initialize an array to which to write data
         self.data_cols = self.tparray.get_serial_data_order()
         self.data = np.zeros((len(self.data_cols)))
+        
+        self.output = kwargs.pop('output','np')
+        
+        # Depending on the specified output format, the convert method is 
+        # pointing to _bytes_to_np() or _bytes_to_pd()
+        if self.output == 'np':
+            self.convert = self._bytes_to_np
+        elif self.output == 'pd':
+            self.convert = self._bytes_to_pd
+            
     
-    def bytes_to_np(self,byte_stream:list):
+    def _bytes_to_np(self,byte_stream:list):
         
         if not isinstance(byte_stream, list):
             TypeError('byte_stream needs to be a list of bytes')
@@ -424,9 +434,9 @@ class HTPA_ByteStream_Reader():
         
         return self.data
     
-    def bytes_to_pd(self,byte_stream:list):
+    def _bytes_to_pd(self,byte_stream:list):
         
-        self.bytes_to_np(byte_stream)
+        self._bytes_to_np(byte_stream)
         
         df_data = pd.DataFrame(data=[self.data],
                                columns=self.data_cols)
@@ -459,10 +469,7 @@ class HTPA_UDPReader():
         
         self.width = width
         self.height = height
-        
-        # Output type. 'np': np.ndarray, 'pd': pd.DataFrame
-        self._output = kwargs.pop('output','np')
-        
+               
         # Port over which HTPA device connects, usually 30444
         self._port = kwargs.pop('port',30444)
         
@@ -483,16 +490,17 @@ class HTPA_UDPReader():
     
         # Initialize ByteStream Reader for convertings bytes to pandas
         # dataframes
-        self.bytestream_reader = HTPA_ByteStream_Reader(width,height)
+        self.bytestream_converter = \
+            HTPA_ByteStream_Converter(width,height,**kwargs)
         
         # depending on the desired output type, choose which method of
         # HTPA_ByteStream_Reader should be used to parse bytes to that 
         # type
         
-        if self.output == 'np':
-            self.bytes_to_output = self.bytestream_reader.bytes_to_np
-        if self.output == 'pd':
-            self.bytes_to_output = self.bytestream_reader.bytes_to_pd
+        # if self.output == 'np':
+        #     self.bytes_to_output = self.bytestream_reader.bytes_to_np
+        # if self.output == 'pd':
+        #     self.bytes_to_output = self.bytestream_reader.bytes_to_pd
             
         
     @property
@@ -526,6 +534,32 @@ class HTPA_UDPReader():
         Warning('Not implemented yet.')
         return None
     
+    def _clear_port(self,udp_socket):
+        """
+        Read all packages available at the specified port. 
+
+        Parameters
+        ----------
+        server_address : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        clear = False
+        while clear == False:
+            
+            try:
+                package = udp_socket.recv(self.tparray._package_size)
+            except:
+                clear = True
+                
+        return package
+            
+    
     def bind_tparray(self,ip:str):
         """
         Creates a socket for the device with the given ip
@@ -546,19 +580,24 @@ class HTPA_UDPReader():
         
         # Create server address
         server_address = (ip,self._port)
-        
+               
         # Set timeout to 1 second
-        socket.setdefaulttimeout(1)
+        # socket.setdefaulttimeout(1)
+        udp_socket.settimeout(1)
         
         # Try calling the device and check if it's a HTPA device
         try:
             _ = udp_socket.sendto(bytes('Calling HTPA series devices',
                                         'utf-8'),
                                        server_address)
-            call = udp_socket.recv(self.tparray._package_size)
         except:
             Exception('Calling HTPA series device failed')
             return None
+        
+        # Read in all packages at this server address to clear the port. 
+        # Keep only the last package which should be the answer to the call
+        call = self._clear_port(udp_socket)
+        
         
         # If calling was successfull, extract basic information from the 
         # answer string
@@ -696,8 +735,7 @@ class HTPA_UDPReader():
                 # bytes into an np.ndarray or pd.DataFrame
                 # df_frame = self.bytestream_reader.bytes_to_df(packages)
                 
-                frame = self.bytestream_reader.bytes_to_np(packages)
-                
+                frame = self.bytestream_converter.convert(packages)
                 
                 success = True
                 
@@ -708,6 +746,170 @@ class HTPA_UDPReader():
 
         return frame
         
+    def read_single_frame(self,dev_id,**kwargs):
+        
+        # Read voltage 'c' or temperature 'k' frame
+        mode = kwargs.pop('mode','k')
+        
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+        
+        # Get udp socket
+        udp_socket = self.sockets[dev_id]
+        
+        # Create server address, i.e. tuple of device IP and port 
+        server_address = (dev_info['IP'].item(), self.port)
+
+        # Send message to device to send the single frame
+        mess = udp_socket.sendto(bytes(mode,'utf-8'),server_address)        
+        
+        # Michaels code is atrocious. Sometimes it sends no frame, sometimes
+        # 1 frame and sometimes two frames. All these cases have to be considered
+        # Try to get first frame (works always)
+        try:
+            frame = self._receive_udp_frame(udp_socket)
+        except:
+            frame = pd.DataFrame(data=[],
+                                 columns = self.tparray.get_serial_data_order())
+        
+        if frame is None:
+            frame = pd.DataFrame(data=[],
+                                 columns = self.tparray.get_serial_data_order())
+        
+        if len(frame) == 0:
+            print('Reading frame failed.')
+        else:
+            print('Successfully received frame')
+        
+        # Clean up whole port in which a second frame may or may not be
+        self._clear_port(udp_socket)
+        
+        return frame
+    
+    def _receive_udp_frame(self,udp_socket):
+        """
+        Receives UDP packages and tries to put them together to a frame
+
+        Parameters
+        ----------
+        udp_socket : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Initialize list for received packages            
+        packages = []
+        
+        # Read incoming packages until one with the package index 1 is received
+        sync = False
+        
+        while sync == False:
+            
+            # Receive package
+            package = udp_socket.recv(self.tparray._package_size)
+            
+            # Get index of package
+            package_index = int(package[0])
+            
+            # Check if it is equal to 1
+            if package_index == 1:
+                packages.append(package)
+                sync = True
+        
+        for p in range(2,self.tparray._package_num+1):
+            
+            # Receive package
+            package = udp_socket.recv(self.tparray._package_size)
+            
+            # Get index of package
+            package_index = int(package[0])
+            
+            # Check if package index has the expected value
+            if package_index == p:
+                packages.append(package)
+                
+        # In the end check if as many packages were received as expected
+        if len(packages) == self.tparray._package_num:
+                            
+            frame = self.bytestream_converter.convert(packages)
+                        
+        else:
+            print('Frame lost.')
+            frame = None
+
+
+        return frame
+        
+    
+    def device_put_to_sleep(self,dev_id,**kwargs):
+        """
+        Puts a device to sleep
+        """
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+        
+        # Get udp socket
+        udp_socket = self.sockets[dev_id]
+                
+        # Create server address
+        server_address = (dev_info['IP'].item(), self.port)
+
+        # Send message to device to start streaming bytes
+        _ = udp_socket.sendto(bytes('s','utf-8'),server_address)
+        answer = udp_socket.recv(self.tparray._package_size)
+        answer = answer.decode('utf-8')
+        
+        
+        if answer.strip() == 'Module set into sleep mode.':
+            print('Device ' + str(dev_id) + ' put to sleep.')
+            return True
+        else:
+            print('Putting device ' + str(dev_id) + ' to sleep failed.')
+            return False
+        
+    def device_wake_up(self,dev_id,**kwargs):
+        """
+        Wakes device up
+        """
+        # Get device information from the device list
+        dev_info = self.devices.loc[[dev_id]]
+        
+        # If more than one devices have the same device id, return error
+        if len(dev_info) != 1:
+            Exception('Multiple devices have the same device id.')
+        
+        # Get udp socket
+        udp_socket = self.sockets[dev_id]
+                
+        # Create server address
+        server_address = (dev_info['IP'].item(), self.port)
+
+        # Send message to device to start streaming bytes
+        _ = udp_socket.sendto(bytes('S','utf-8'),server_address)
+        answer = udp_socket.recv(self.tparray._package_size)
+        answer = answer.decode('utf-8')
+        
+        
+        if answer.strip() == 'Module woke up.':
+            print('Device ' + str(dev_id) + ' awake.')
+            return True
+        else:
+            print('Failed waking up device ' + str(dev_id) + '.')
+            return False
+    
+    
     def _callstring_to_information(self,call:bytes):
         """
         Extracts information from the ridiculously long and inefficient answer
@@ -729,8 +931,13 @@ class HTPA_UDPReader():
         
         # Extract information from callstring
         arraytype = int(call.split('Arraytype')[1].split('MODTYPE')[0])
-        mac_id = re.findall(r'\d{2}\.\d{2}\.\w{2}\.\d{2}.\d{2}.\d{2}',call)[0]
+        mac_id = re.findall(r'\w{2}\.\w{2}\.\w{2}\.\w{2}.\w{2}.\w{2}',call)[0]
         ip = re.findall(r'\d{3}\.\d{3}\.\d{3}.\d{3}',call)[0]
+        
+        # Remove leading zeros from IP
+        ip = '.'.join([str(int(x)) for x in ip.split('.')])
+        
+        
         dev_id = int(call.split('DevID:')[1].split('Emission')[0])
         
                 

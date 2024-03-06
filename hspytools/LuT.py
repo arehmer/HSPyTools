@@ -168,6 +168,11 @@ class LuT:
             print('Data index is not unique. reset_index() is applied!')
             data = data.reset_index()
         
+        # print('Temperatures are assumed to be provided in Kelvin ' +\
+        #       'and are converted to dK.')
+        
+        
+        data[[Ta_col,To_col]] = (data[[Ta_col,To_col]]*10).astype(int)
         
         for meas in data.index:
             
@@ -205,11 +210,18 @@ class LuT:
             data.loc[meas,'Ud_LuT'] = Ud_row + \
                 (To_meas - LuT_copy.loc[Ud_row,new_col]) * f
                 
+        
+        # print('Temperatures are converted back to Kelvin.')
+        data[[Ta_col,To_col]] = (data[[Ta_col,To_col]]/10)
+        
         return data
         
     def eval_LuT(self,data,Ta_col='Tamb0',Ud_col='Ud'):
         
         LuT = self.LuT
+        
+        # Convert measurements in Kelvin to dK
+        data[[Ta_col]] = (data[[Ta_col]]*10).astype(int)
         
         for meas in data.index:
                      
@@ -244,6 +256,9 @@ class LuT:
             data.loc[meas,'To_LuT'] = \
                 self._get_To(rect_pnts,Ta_meas,Ud)
                 
+        # Convert dK back to K
+        data[[Ta_col,'To_LuT']] = (data[[Ta_col,'To_LuT']]/10)
+                        
         return data
         
         

@@ -122,6 +122,29 @@ class QuadriPolygon():
         V = [v0,v1,v2,v3]
         
         return V
+    
+    # def _in_inner_rect(self,df_pnt):
+        
+    #     # get polygon
+    #     polygon = self.polygon.copy()
+        
+    #     # Construct corners of a rectangle that lies completely in the polygon
+    #     Tamb_low = polygon.loc[['v0','v1'],'Tamb0'].max()
+    #     Tamb_up = polygon.loc[['v2','v3'],'Tamb0'].min()
+        
+    #     Ud_low = polygon.loc[['v0','v3'],'Ud'].max()
+    #     Ud_up = polygon.loc[['v1','v2'],'Tamb0'].min()
+        
+        
+    #     # Check if point is inside inner rectangle
+    #     if (Tamb_low<df_pnt['Tamb0']<Tamb_up) & (Ud_low<df_pnt['Ud']<Ud_up):
+    #         in_poly = True
+    #     else:
+    #         in_poly = False
+            
+    #     return in_poly
+            
+        
         
     def in_polygon(self,df_pnt):
         '''
@@ -152,14 +175,11 @@ class QuadriPolygon():
         
         # Extract scheduling variables from df_pnt
         df_pnt = df_pnt[self.u]
-        
-        # Debugging
-        # df_pnt.iloc[0]['Ud'] = 500
-        # df_pnt.iloc[0]['Tamb0'] = 300
-        
+       
         # Edges of the polygon
         E = [('v0','v1'),('v1','v2'),('v2','v3'),('v3','v0')]
         
+        # If not, one has to do a long and cumbersome calculation
         # direction of the ray 
         r = df_pnt.copy()
         r[self.u[0]] = 1
@@ -169,9 +189,7 @@ class QuadriPolygon():
         
         # Project point on all edges
         for e in E:
-            
-
-           
+                       
             v0 = polygon.loc[e[0]]
             v1 = polygon.loc[e[1]]
 

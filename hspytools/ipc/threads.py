@@ -45,7 +45,7 @@ class UDP(WThread):
 
         """
         
-        self.output_type = kwargs.pop('output_type','np')
+        # self.output_type = kwargs.pop('output_type','np')
         
         # Set UDP Reader object as attribute
         self.udp_reader = udp_reader

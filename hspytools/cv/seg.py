@@ -38,6 +38,9 @@ class Seg():
         self.w = w
         self.h = h
         self.pix_frame = kwargs.pop('pix_frame',1)
+        self.png_path = kwargs.pop('png_path','seg_png')
+        
+        
                
         self.lonely_pix_filter = Convolution(mode='same')
         conv_filter = np.zeros((3,3))
@@ -242,7 +245,7 @@ class Seg():
         cbar_ax = fig.add_axes([0.88, 0.15, 0.04, 0.7])
         fig.colorbar(im2, cax=cbar_ax)
         
-        save_path = Path.cwd() / 'img_seg'
+        save_path = Path.cwd() / self.png_path
         
         # Check if directory for saving clustering results exists
         if not save_path.is_dir():
