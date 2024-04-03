@@ -335,8 +335,8 @@ class WatershedSeg(Seg):
         Warning('Remove thresholder and border in future releases!')
         Warning('Background mean set constant here. Delete background!')
         
-        
-        self.lap_kernel = np.array([[1, 1, 1], [1, -8, 1], [1, 1, 1]],
+        c = 12
+        self.lap_kernel = np.array([[c/8, c/8, c/8], [c/8, -c, c/8], [c/8, c/8, c/8]],
                                    dtype=np.float32)
         self.morph_kernel = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]],
                                      dtype=np.uint8)
@@ -370,19 +370,23 @@ class WatershedSeg(Seg):
     def _threshold_frame(self,img,sharpen):
         
         # Normalize image
-        img = np.uint16(img)
-
-        img = cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
+        # img = np.uint16(img)
+        img_orig = img.copy()
+        # img = cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
+        
         
         # Sharpen image to detect edges better
         if sharpen==True:
             img = self._sharpen_img(img)
-                
+        
+        
         _,img_above = self.thresholder.threshold(img)
+        
         img_above[~np.isnan(img_above)] = 255 #0
         img_above[np.isnan(img_above)] = 0 #255
         img_thresh = np.uint8(img_above)
         
+
         return img_thresh
     
     def _get_foreground(self,img,d_lim):
@@ -410,6 +414,9 @@ class WatershedSeg(Seg):
         return img_fg
     
     def segment_frame(self,img):
+        
+        # Convert image to uint16
+        img = np.uint16(img)
         
         img_orig = img.copy()
         
@@ -517,13 +524,13 @@ class WatershedSeg(Seg):
     
     def _sharpen_img(self,img):
         
-        laplace_img = cv2.filter2D(img, cv2.CV_32F, self.lap_kernel)
-        sharp_img = np.float32(img)
-        sharp_img = sharp_img - laplace_img
+        laplace_img = cv2.filter2D(img, cv2.CV_16U, self.lap_kernel)
+        # sharp_img = np.float32(img)
+        img = img - laplace_img
         # sharp_img = np.clip(sharp_img, 0, 255)
         # sharp_img = sharp_img.astype('uint8')
         
-        return sharp_img
+        return img
     
     def _filter_bboxes(self,bboxes):
         """

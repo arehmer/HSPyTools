@@ -89,7 +89,7 @@ class TPArray():
             DevConst['VDDaddr']=2880
             DevConst['TAaddr']=2881
             DevConst['PTaddr']=2882
-            DevConst['ATCaddr']=2892
+            DevConst['ATCaddr']=1
             DevConst['NROFBLOCKS']=5
             DevConst['NROFPTAT']=2
             
@@ -98,16 +98,16 @@ class TPArray():
             self._fs = 47
             self._NETD = 90
 
-        elif (width,height) == (60,84):
-            DevConst['VDDaddr']=5760
-            DevConst['TAaddr']=5761
-            DevConst['PTaddr']=5762
-            DevConst['ATCaddr']=0
-            DevConst['NROFBLOCKS']=7
-            DevConst['NROFPTAT']=2
+        elif (width,height) == (160,120):
+            DevConst['VDDaddr'] = int(160*120+120/12*160)
+            DevConst['TAaddr'] = DevConst['VDDaddr'] + 1
+            DevConst['PTaddr'] = DevConst['TAaddr'] + 1
+            DevConst['ATCaddr'] = 1
+            DevConst['NROFBLOCKS'] = 12
+            DevConst['NROFPTAT'] = 2
             
-            self._package_num = 9
-            self._package_size = 1285
+            self._package_num = 30
+            self._package_size = 1401
             self._fs = 25
             self._NETD = 110
             
@@ -210,11 +210,19 @@ class TPArray():
             
         elif (width,height) == (60,40):
             
-            ee['adr_vddCompGrad'][0] = 1028 #64
-            ee['adr_vddCompOff'][0] = 1088 #68
-            ee['adr_thGrad'][0] = 1148 #71
-            ee['adr_thOff'][0] = 1448 #90
-            ee['adr_pij'][0] = 1748 #109
+            ee['adr_vddCompGrad'][0] = 1028
+            ee['adr_vddCompOff'][0] = 1088
+            ee['adr_thGrad'][0] = 1148
+            ee['adr_thOff'][0] = 1448
+            ee['adr_pij'][0] = 1748
+        
+        elif (width,height) == (160,120):
+            
+            ee['adr_vddCompGrad'][0] = 528
+            ee['adr_vddCompOff'][0] = 728
+            ee['adr_thGrad'][0] = 928
+            ee['adr_thOff'][0] = 3328
+            ee['adr_pij'][0] = 5728
             
         else:
             raise Exception('Implement EEPROM Map for this array type!')
@@ -304,6 +312,8 @@ class TPArray():
             bccData = np.reshape(bccData, (2048, 16))
         elif (self._size[0] == 60) and (self._size[1] == 40):
             bccData = np.reshape(bccData, (2048, 16))
+        elif (self._size[0] == 160) and (self._size[1] == 120):
+            bccData = np.reshape(bccData, (17728, 16))
         else:
             raise Exception('import_BCC needs to be updated to handle this array type!')
         ##########################################################
@@ -427,12 +437,14 @@ class TPArray():
         # get ThGrad and ThOffset
         thGrad_el = np.zeros([self._size[0] * self._size[1]])
         thOff_el = np.zeros([self._size[0] * self._size[1]])
+        
         # 32x32
         if(self._size[0] == 32) and (self._size[1] == 32):
             for i in range(int(self._size[0] * self._size[1] / 8)):
                 for j in range(8):
                     thGrad_el[j + 8 * i] = ctypes.c_int16((bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + 2 * j])).value
                     thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
+        
         # All other array types
         else:
             for i in range(int(self._size[0] * self._size[1] / 16)):
@@ -441,28 +453,7 @@ class TPArray():
             for i in range(int(self._size[0] * self._size[1] / 8)):
                 for j in range(8):
                     thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
-        
-        # # 80x64
-        # elif(self._size[0] == 80) and (self._size[1] == 64):
-        #     for i in range(int(self._size[0] * self._size[1] / 16)):
-        #         for j in range(16):
-        #             thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
-        #     for i in range(int(self._size[0] * self._size[1] / 8)):
-        #         for j in range(8):
-        #             thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
-        # # 60x84
-        # elif(self._size[0] == 60) and (self._size[1] == 84):
-        #     for i in range(int(self._size[0] * self._size[1] / 16)):
-        #         for j in range(16):
-        #             thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
-        #     for i in range(int(self._size[0] * self._size[1] / 8)):
-        #         for j in range(8):
-        #             thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
-        # # 60x40
-        # elif(self._size[0] == 60) and (self._size[1] == 40):
-            
-        # else:
-        #     raise Exception('Arraytype not implemented!')
+
         
         
         # sort ThGrad and ThOffset

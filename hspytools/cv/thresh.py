@@ -65,7 +65,7 @@ class Otsu():
         # In all other cases apply Otu's method as usual
         criterias = [self._1d_otsu(img_off, th) for th in threshold_range]
 
-            
+           
         # There might exist mutliple local minima! Espeacially in more
         # noisy images. Search for all local minima
         criterias = np.array(criterias).astype(int)
