@@ -7,7 +7,9 @@ Created on Wed Jun 21 11:16:48 2023
 import numpy as np
 import ctypes
 import pandas as pd
-
+import json
+from pathlib import Path
+import struct
 
 class TPArray():
     """
@@ -111,6 +113,14 @@ class TPArray():
             self._fs = 25
             self._NETD = 110
             
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '160x120.json'
+            
+            with open(path,'r') as file:
+                eeprom_adresses = json.load(file)
+            
+            self._eeprom_adresses =  eeprom_adresses
+            
             
         self._DevConst = DevConst
         self._width = width
@@ -165,70 +175,70 @@ class TPArray():
         # initialize empty dictionary ee for eeprom adresses
         ee = {}
          
-        # Code by Christoph
-        ee['adr_pixcmin'] = np.array([0, 0])
-        ee['adr_pixcmax'] = np.array([0, 4])
-        ee['adr_gradScale'] = np.array([0, 8])
-        ee['adr_epsilon'] = np.array([0, 13])
-        ee['adr_vddMeas_th1'] = np.array([2, 6])
-        ee['adr_vddMeas_th2'] = np.array([2, 8])
-        ee['adr_ptatGrad'] = np.array([3, 4])
-        ee['adr_ptatOffset'] = np.array([3, 8])
-        ee['adr_ptat_th1'] = np.array([3, 12])
-        ee['adr_ptat_th2'] = np.array([3, 14])
-        ee['adr_vddScGrad'] = np.array([4, 14])
-        ee['adr_vddScOff'] = np.array([4, 15])
-        ee['adr_globalOff'] = np.array([5, 4])
-        ee['adr_globalGain'] = np.array([5, 5])
+        # # Code by Christoph
+        # ee['adr_pixcmin'] = np.array([0, 0])
+        # ee['adr_pixcmax'] = np.array([0, 4])
+        # ee['adr_gradScale'] = np.array([0, 8])
+        # ee['adr_epsilon'] = np.array([0, 13])
+        # ee['adr_vddMeas_th1'] = np.array([2, 6])
+        # ee['adr_vddMeas_th2'] = np.array([2, 8])
+        # ee['adr_ptatGrad'] = np.array([3, 4])
+        # ee['adr_ptatOffset'] = np.array([3, 8])
+        # ee['adr_ptat_th1'] = np.array([3, 12])
+        # ee['adr_ptat_th2'] = np.array([3, 14])
+        # ee['adr_vddScGrad'] = np.array([4, 14])
+        # ee['adr_vddScOff'] = np.array([4, 15])
+        # ee['adr_globalOff'] = np.array([5, 4])
+        # ee['adr_globalGain'] = np.array([5, 5])
         
-        ee['adr_vddCompGrad'] = np.array([0, 0])
-        ee['adr_vddCompOff'] = np.array([0, 0])
-        ee['adr_thGrad'] = np.array([0, 0])
-        ee['adr_thOff'] = np.array([0, 0])
-        ee['adr_pij'] = np.array([0, 0])
+        # ee['adr_vddCompGrad'] = np.array([0, 0])
+        # ee['adr_vddCompOff'] = np.array([0, 0])
+        # ee['adr_thGrad'] = np.array([0, 0])
+        # ee['adr_thOff'] = np.array([0, 0])
+        # ee['adr_pij'] = np.array([0, 0])
         
-        if (width,height) == (32,32):
-            ee['adr_vddCompGrad'][0] = 52
-            ee['adr_vddCompOff'][0] = 84
-            ee['adr_thGrad'][0] = 116
-            ee['adr_thOff'][0] = 244
-            ee['adr_pij'][0] = 372
+        # if (width,height) == (32,32):
+        #     ee['adr_vddCompGrad'][0] = 52
+        #     ee['adr_vddCompOff'][0] = 84
+        #     ee['adr_thGrad'][0] = 116
+        #     ee['adr_thOff'][0] = 244
+        #     ee['adr_pij'][0] = 372
             
-        elif (width,height) == (80,64):
-            ee['adr_vddCompGrad'][0] = 128
-            ee['adr_vddCompOff'][0] = 288
-            ee['adr_thGrad'][0] = 448
-            ee['adr_thOff'][0] = 768
-            ee['adr_pij'][0] = 1408
+        # elif (width,height) == (80,64):
+        #     ee['adr_vddCompGrad'][0] = 128
+        #     ee['adr_vddCompOff'][0] = 288
+        #     ee['adr_thGrad'][0] = 448
+        #     ee['adr_thOff'][0] = 768
+        #     ee['adr_pij'][0] = 1408
             
-        elif (width,height) == (60,84):
-            ee['adr_vddCompGrad'][0] = 293
-            ee['adr_vddCompOff'][0] = 383
-            ee['adr_thGrad'][0] = 473
-            ee['adr_thOff'][0] = 788
-            ee['adr_pij'][0] = 1418
+        # elif (width,height) == (60,84):
+        #     ee['adr_vddCompGrad'][0] = 293
+        #     ee['adr_vddCompOff'][0] = 383
+        #     ee['adr_thGrad'][0] = 473
+        #     ee['adr_thOff'][0] = 788
+        #     ee['adr_pij'][0] = 1418
             
-        elif (width,height) == (60,40):
+        # elif (width,height) == (60,40):
             
-            ee['adr_vddCompGrad'][0] = 1028
-            ee['adr_vddCompOff'][0] = 1088
-            ee['adr_thGrad'][0] = 1148
-            ee['adr_thOff'][0] = 1448
-            ee['adr_pij'][0] = 1748
+        #     ee['adr_vddCompGrad'][0] = 1028
+        #     ee['adr_vddCompOff'][0] = 1088
+        #     ee['adr_thGrad'][0] = 1148
+        #     ee['adr_thOff'][0] = 1448
+        #     ee['adr_pij'][0] = 1748
         
-        elif (width,height) == (160,120):
+        # elif (width,height) == (160,120):
             
-            ee['adr_vddCompGrad'][0] = 528
-            ee['adr_vddCompOff'][0] = 728
-            ee['adr_thGrad'][0] = 928
-            ee['adr_thOff'][0] = 3328
-            ee['adr_pij'][0] = 5728
+        #     ee['adr_vddCompGrad'][0] = 528
+        #     ee['adr_vddCompOff'][0] = 728
+        #     ee['adr_thGrad'][0] = 928
+        #     ee['adr_thOff'][0] = 3328
+        #     ee['adr_pij'][0] = 5728
             
-        else:
-            raise Exception('Implement EEPROM Map for this array type!')
+        # else:
+        #     raise Exception('Implement EEPROM Map for this array type!')
             
         
-        self._eeprom_adresses = ee
+        # self._eeprom_adresses = ee
         
                 
     def _comp_eloff():
@@ -290,7 +300,7 @@ class TPArray():
         """
         
         # Shorthand for EEPROM Adresses
-        ee = self.get_eeprom_adresses()
+        ee = self.get_eeprom_adresses()['EEPROM']
         
         # Initialize empty dict for return results
         bcc = {}
@@ -299,245 +309,94 @@ class TPArray():
         # get all relevant data from .bcc file #
         ########################################
         
-        # read hex data as char
-        bccData = np.fromfile(bcc_path.absolute(), dtype='uint8')
+        # read hex data in bit by bit
+        with open(bcc_path,'rb') as bcc_file:
+            bcc_raw = bcc_file.read() 
         
-        # reshape to sort EEPROM content as rows of 16 addresses
-        if(self._size[0] == 32) and (self._size[1] == 32):
-            bccData = bccData[0:512*16]
-            bccData = np.reshape(bccData, (512, 16))
-        elif (self._size[0] == 60) and (self._size[1] == 84):
-            bccData = np.reshape(bccData, (2048, 16))
-        elif (self._size[0] == 80) and (self._size[1] == 64):
-            bccData = np.reshape(bccData, (2048, 16))
-        elif (self._size[0] == 60) and (self._size[1] == 40):
-            bccData = np.reshape(bccData, (2048, 16))
-        elif (self._size[0] == 160) and (self._size[1] == 120):
-            bccData = np.reshape(bccData, (17728, 16))
-        else:
-            raise Exception('import_BCC needs to be updated to handle this array type!')
-        ##########################################################
-        # calculate all numbers from individual EEPROM addresses #
-        ##########################################################
-        
-        # calculate PixCmin (saved as float in EEPROM)
-        pixcmin_el = np.array([[bccData[ee['adr_pixcmin'][0], ee['adr_pixcmin'][1]]],
-                               [bccData[ee['adr_pixcmin'][0], ee['adr_pixcmin'][1] + 1]],
-                               [bccData[ee['adr_pixcmin'][0], ee['adr_pixcmin'][1] + 2]],
-                               [bccData[ee['adr_pixcmin'][0], ee['adr_pixcmin'][1] + 3]]])
-        if pixcmin_el[3] > 127:
-            pixcmin_sign = -1
-        else:
-            pixcmin_sign = 1
-        pixcmin_exp = np.floor(((((pixcmin_el[3] * 256) + pixcmin_el[2]) % 32768) / 128) - 127).astype(int)[0]
-        pixcmin_mantissa = ((pixcmin_el[2] * 65536 + pixcmin_el[1] * 256 + pixcmin_el[0]) % (16777216 / 2)).astype(int)[0]
-        pixcmin = pixcmin_sign * (2.0 ** pixcmin_exp) * ((pixcmin_mantissa + 2 ** 23) / (2 ** 23))
-        
-        # calculate PixCmax (saved as float in EEPROM)
-        pixcmax_el = np.array([[bccData[ee['adr_pixcmax'][0], ee['adr_pixcmax'][1]]],
-                               [bccData[ee['adr_pixcmax'][0], ee['adr_pixcmax'][1] + 1]],
-                               [bccData[ee['adr_pixcmax'][0], ee['adr_pixcmax'][1] + 2]],
-                               [bccData[ee['adr_pixcmax'][0], ee['adr_pixcmax'][1] + 3]]])
-        if pixcmax_el[3] > 127:
-            pixcmax_sign = -1
-        else:
-            pixcmax_sign = 1
-        pixcmax_exp = np.floor(((((pixcmax_el[3] * 256) + pixcmax_el[2]) % 32768) / 128) - 127).astype(int)[0]
-        pixcmax_mantissa = ((pixcmax_el[2] * 65536 + pixcmax_el[1] * 256 + pixcmax_el[0]) % (16777216 / 2)).astype(int)[0]
-        pixcmax = pixcmax_sign * (2.0 ** pixcmax_exp) * ((pixcmax_mantissa + 2 ** 23) / (2 ** 23))
-        
-        # get gradscale
-        gradScale = bccData[ee['adr_gradScale'][0], ee['adr_gradScale'][1]]
-        
-        # get epsilon
-        epsilon = bccData[ee['adr_epsilon'][0], ee['adr_epsilon'][1]]
-        
-        # get Vdd Meas Th1
-        vddMeas_th1 = bccData[ee['adr_vddMeas_th1'][0], ee['adr_vddMeas_th1'][1] + 1] * 256 + bccData[ee['adr_vddMeas_th1'][0], ee['adr_vddMeas_th1'][1]]
-        
-        # get Vdd Meas Th2
-        vddMeas_th2 = bccData[ee['adr_vddMeas_th2'][0], ee['adr_vddMeas_th2'][1] + 1] * 256 + bccData[ee['adr_vddMeas_th2'][0], ee['adr_vddMeas_th2'][1]]
-        
-        # calculate PTAT-Gradient (saved as float in EEPROM)
-        ptatGrad_el = np.array([[bccData[ee['adr_ptatGrad'][0], ee['adr_ptatGrad'][1]]],
-                                [bccData[ee['adr_ptatGrad'][0], ee['adr_ptatGrad'][1] + 1]],
-                                [bccData[ee['adr_ptatGrad'][0], ee['adr_ptatGrad'][1] + 2]],
-                                [bccData[ee['adr_ptatGrad'][0], ee['adr_ptatGrad'][1] + 3]]])
-        if ptatGrad_el[3] > 127:
-            ptatGrad_sign = -1
-        else:
-            ptatGrad_sign = 1
-        ptatGrad_exp = np.floor(((((ptatGrad_el[3] * 256) + ptatGrad_el[2]) % 32768) / 128) - 127).astype(int)[0]
-        ptatGrad_mantissa = ((ptatGrad_el[2] * 65536 + ptatGrad_el[1] * 256 + ptatGrad_el[0]) % (16777216 / 2)).astype(int)[0]
-        ptatGrad = ptatGrad_sign * (2.0 ** ptatGrad_exp) * ((ptatGrad_mantissa + 2 ** 23) / (2 ** 23))
-        
-        # calculate PTAT-Offset (saved as float in EEPROM)
-        ptatOffset_el = np.array([[bccData[ee['adr_ptatOffset'][0], ee['adr_ptatOffset'][1]]],
-                                [bccData[ee['adr_ptatOffset'][0], ee['adr_ptatOffset'][1] + 1]],
-                                [bccData[ee['adr_ptatOffset'][0], ee['adr_ptatOffset'][1] + 2]],
-                                [bccData[ee['adr_ptatOffset'][0], ee['adr_ptatOffset'][1] + 3]]])
-        if ptatOffset_el[3] > 127:
-            ptatOffset_sign = -1
-        else:
-            ptatOffset_sign = 1
-        ptatOffset_exp = np.floor(((((ptatOffset_el[3] * 256) + ptatOffset_el[2]) % 32768) / 128) - 127).astype(int)[0]
-        ptatOffset_mantissa = ((ptatOffset_el[2] * 65536 + ptatOffset_el[1] * 256 + ptatOffset_el[0]) % (16777216 / 2)).astype(int)[0]
-        ptatOffset = ptatOffset_sign * (2.0 ** ptatOffset_exp) * ((ptatOffset_mantissa + 2 ** 23) / (2 ** 23))
-        
-        # get PTAT(Th1)
-        ptat_th1 = bccData[ee['adr_ptat_th1'][0], ee['adr_ptat_th1'][1] + 1] * 256 + bccData[ee['adr_ptat_th1'][0], ee['adr_ptat_th1'][1]]
-        
-        # get PTAT(Th2)
-        ptat_th2 = bccData[ee['adr_ptat_th2'][0], ee['adr_ptat_th2'][1] + 1] * 256 + bccData[ee['adr_ptat_th2'][0], ee['adr_ptat_th2'][1]]
-        
-        # get VddScaling
-        vddScGrad = bccData[ee['adr_vddScGrad'][0], ee['adr_vddScGrad'][1]]
-        
-        # get VddScalingOff
-        vddScOff = bccData[ee['adr_vddScOff'][0], ee['adr_vddScOff'][1]]
-        
-        # get GlobalOff
-        globalOff = ctypes.c_int8(bccData[ee['adr_globalOff'][0], ee['adr_globalOff'][1]]).value
-        
-        # get GlobalGain
-        globalGain = bccData[ee['adr_globalGain'][0], ee['adr_globalGain'][1] + 1] * 256 + bccData[ee['adr_globalGain'][0], ee['adr_globalGain'][1]]
-        
-        # get VddCompGrad and VddCompOffset
-        vddCompGrad_el = np.zeros([self._pixelPerBlock * 2])
-        vddCompOff_el = np.zeros([self._pixelPerBlock * 2])
-        for i in range(int(self._pixelPerBlock * 2 / 8)):
-            for j in range(8):
-                vddCompGrad_el[8 * i + j] = ctypes.c_int16(bccData[ee['adr_vddCompGrad'][0] + i, ee['adr_vddCompGrad'][1] + 2 * j + 1] * 256 + bccData[ee['adr_vddCompGrad'][0] + i, ee['adr_vddCompGrad'][1] + 2 * j]).value
-                vddCompOff_el[8 * i + j] = ctypes.c_int16(bccData[ee['adr_vddCompOff'][0] + i, ee['adr_vddCompOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_vddCompOff'][0] + i, ee['adr_vddCompOff'][1] + 2 * j]).value
-        # sort VddCompGrad and VddCompOffset
-        vddCompGrad = np.zeros([self._rowsPerBlock * 2, self._size[0]])
-        vddCompOff = np.zeros([self._rowsPerBlock * 2, self._size[0]])
-        m = 0
-        n = 0
-            # top half
-        for i in range(self._pixelPerBlock):
-            vddCompGrad[m][n] = vddCompGrad_el[i]
-            vddCompOff[m][n] = vddCompOff_el[i]
-            n += 1
-            if (n == self._size[0]):
-                n = 0
-                m += 1
-        
-            # bottom half
-        m = self._rowsPerBlock * 2 - 1
-        n = 0
-        for i in range(self._pixelPerBlock):
-            vddCompGrad[m][n] = vddCompGrad_el[self._pixelPerBlock + i]
-            vddCompOff[m][n] = vddCompOff_el[self._pixelPerBlock + i]
-            n += 1
-            if (n == self._size[0]):
-                n = 0
-                m -= 1
-        
-        # get ThGrad and ThOffset
-        thGrad_el = np.zeros([self._size[0] * self._size[1]])
-        thOff_el = np.zeros([self._size[0] * self._size[1]])
-        
-        # 32x32
-        if(self._size[0] == 32) and (self._size[1] == 32):
-            for i in range(int(self._size[0] * self._size[1] / 8)):
-                for j in range(8):
-                    thGrad_el[j + 8 * i] = ctypes.c_int16((bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + 2 * j])).value
-                    thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
-        
-        # All other array types
-        else:
-            for i in range(int(self._size[0] * self._size[1] / 16)):
-                for j in range(16):
-                    thGrad_el[j + 16 * i] = ctypes.c_int8(bccData[ee['adr_thGrad'][0] + i, ee['adr_thGrad'][1] + j]).value
-            for i in range(int(self._size[0] * self._size[1] / 8)):
-                for j in range(8):
-                    thOff_el[j + 8 * i] = ctypes.c_int16(bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j + 1] * 256 + bccData[ee['adr_thOff'][0] + i, ee['adr_thOff'][1] + 2 * j]).value
+        # Read and convert data according to provided json file
+        for key in ee.keys():
+            
+            # Ge start and stop indices from addresses
+            idx_start = int(ee[key]['adr_start'],0)
+            idx_stop = int(ee[key]['adr_stop'],0)+1
+            
+            # Get raw value
+            raw_val = bcc_raw[idx_start:idx_stop]
+            
+            # Convert raw value 
+            bcc[key] = self._convert_raw_bcc(raw_val,ee[key]['dtype'])
 
         
         
-        # sort ThGrad and ThOffset
-        thGrad = np.zeros([self._size[1], self._size[0]])
-        thOff = np.zeros([self._size[1], self._size[0]])
-        m = 0
-        n = 0
-        # top half
-        for i in range((int)(self._size[0] * self._size[1] / 2)):
-            thGrad[m][n] = thGrad_el[i]
-            thOff[m][n] = thOff_el[i]
-            n += 1
-            if (n == self._size[0]):
-                n = 0
-                m += 1
+        # Convert all arrays to appropriate shape and flip them
+        # properly
+        bcc['pij'] = np.array(bcc['pij']).reshape(self._npsize)
+        bcc['thGrad'] = np.array(bcc['thGrad']).reshape(self._npsize)
+        bcc['thOff'] = np.array(bcc['thOff']).reshape(self._npsize)
         
-            # bottom half
-        m = self._size[1] - 1
-        n = 0
-        i = 0
-        for i in range((int)(self._size[0] * self._size[1] / 2)):
-            thGrad[m][n] = thGrad_el[(int)(self._size[0] * self._size[1] / 2) + i]
-            thOff[m][n] = thOff_el[(int)(self._size[0] * self._size[1] / 2) + i]
-            n += 1
-            if (n == self._size[0]):
-                n = 0
-                m -= 1
+        NROFBLOCKS = self.get_DevConst()['NROFBLOCKS']
+        vdd_size = (int(self._height/NROFBLOCKS),self._width)
         
-        # get Pij
-        pij_el = np.zeros([self._size[0] * self._size[1]])
-        for i in range(int(self._size[0] * self._size[1] / 8)):
-            for j in range(8):
-                pij_el[j + 8 * i] = bccData[ee['adr_pij'][0] + i, ee['adr_pij'][1] + 2 * j + 1] * 256 + bccData[ee['adr_pij'][0] + i, ee['adr_pij'][1] + 2 * j]
+        bcc['vddCompGrad'] = np.array(bcc['vddCompGrad']).reshape(vdd_size)
+        bcc['vddCompOff'] = np.array(bcc['vddCompOff']).reshape(vdd_size)
         
-        # sort Pij
-        pij = np.zeros([self._size[1], self._size[0]])
-        m = 0
-        n = 0
-            # top half
-        for i in range((int)(self._size[0] * self._size[1] / 2)):
-            pij[m][n] = pij_el[i]
-            n += 1
-            if (n == self._size[0]):
-                n = 0
-                m += 1
+        # The lower half needs to be flipped vertically
+        bcc['pij'][int(self._height/2):,::] = \
+            np.flipud(bcc['pij'][int(self._height/2):,::])
         
-            # bottom half
-        m = self._size[1] - 1
-        n = 0
-        i = 0
-        for i in range((int)(self._size[0] * self._size[1] / 2)):
-            pij[m][n] = pij_el[(int)(self._size[0] * self._size[1] / 2) + i]
-            n += 1
-            if (n == self._size[0]):
-                n = 0
-                m -= 1
+        bcc['thGrad'][int(self._height/2):,::] = \
+            np.flipud(bcc['thGrad'][int(self._height/2):,::])
+            
+        bcc['thOff'][int(self._height/2):,::] = \
+            np.flipud(bcc['thOff'][int(self._height/2):,::])
 
-        # In the end package all the important stuff in a dict and return
         
-        bcc['gradScale'] = gradScale
-        bcc['vddScGrad'] = vddScGrad
-        bcc['vddScOff'] = vddScOff
-        bcc['pij'] = pij
-        bcc['pixcmin'] = pixcmin
-        bcc['pixcmax'] = pixcmax
-        bcc['epsilon'] = epsilon
-        bcc['globalGain'] = globalGain
-        bcc['ptatGrad'] = ptatGrad
-        bcc['ptatOffset'] = ptatOffset
-        bcc['thGrad'] = thGrad
-        bcc['thOff'] = thOff
-        bcc['vddCompGrad'] = vddCompGrad
-        bcc['vddCompOff'] = vddCompOff
-        bcc['vddMeas_th1'] = vddMeas_th1
-        bcc['vddMeas_th2'] = vddMeas_th2
-        bcc['ptat_th1'] = ptat_th1
-        bcc['ptat_th2'] = ptat_th2
-        bcc['globalOff'] = globalOff
+        bcc['vddCompGrad'][int(vdd_size[0]/2):,::] = \
+            np.flipud(bcc['vddCompGrad'][int(vdd_size[0]/2):,::])
+        
+        bcc['vddCompOff'][int(vdd_size[0]/2):,::] = \
+            np.flipud(bcc['vddCompOff'][int(vdd_size[0]/2):,::])
+        
         
         self._bcc = bcc 
         
         return bcc
     
 
+    def _convert_raw_bcc(self,raw_val:list,dtype:str):
+        """
+        Link to documentation of struct lybrary
+        https://docs.python.org/3/library/struct.html#struct-format-strings
+        """
+        
+        if dtype == 'float32':
+            b_idx = np.arange(0,len(raw_val),4)
+            conv_val = [struct.unpack('f',raw_val[b:b+4])[0] for b in  b_idx]
+            
+        elif dtype == 'uint8':            
+            b_idx = np.arange(0,len(raw_val),1)
+            conv_val = [struct.unpack('B',raw_val[b:b+1])[0] for b in  b_idx] 
+            
+        elif dtype == 'uint16':
+            b_idx = np.arange(0,len(raw_val),2)
+            conv_val = [struct.unpack('<H',raw_val[b:b+2])[0] for b in  b_idx] 
+
+        elif dtype == 'int8':
+            b_idx = np.arange(0,len(raw_val),1)
+            conv_val = [struct.unpack('b',raw_val[b:b+1])[0] for b in  b_idx] 
+            
+        elif dtype == 'int16':
+            b_idx = np.arange(0,len(raw_val),2)
+            conv_val = [struct.unpack('<h',raw_val[b:b+2])[0] for b in  b_idx] 
+
+        else:
+            Exception('Unknown datatype')
+            conv_val = None
+        
+        return conv_val
+            
+        
+        
 
     def _comp_thermal_offset(self,df_meas):
         
