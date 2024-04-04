@@ -570,7 +570,6 @@ class TPArray():
         df_meas = self._comp_thermal_offset(df_meas.copy())
         df_meas = self._comp_electrical_offset(df_meas)
         df_meas = self._comp_vdd(df_meas)
-        df_meas = self._comp_sens(df_meas)
         df_meas = self._calc_Tamb0(df_meas)
         
         return df_meas
@@ -584,13 +583,11 @@ class TPArray():
         
         # Perform all compensation operations on data
         df_meas = self.rawmeas_comp(df_meas)
+        df_meas = self._comp_sens(df_meas)
         
         # Load LuT
         LuT = self.LuT.copy()
-        
-        
-        
-        
+                
         Warning('''rawmeas_to_dK returns compensated voltage, not dK! Remaining operations need to be implemented for dataframe format!''')
         
         # #############  step 5: multiply sensitivity coeff for each pixel #############
