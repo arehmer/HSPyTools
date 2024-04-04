@@ -87,6 +87,11 @@ class TPArray():
             self._fs = 28
             self._NETD = 130
             
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '120x84.json'
+            # Load calibration data from file
+            self._load_calib_json(path)
+            
         elif (width,height) == (60,40):
             DevConst['VDDaddr']=2880
             DevConst['TAaddr']=2881
@@ -115,11 +120,8 @@ class TPArray():
             
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '160x120.json'
-            
-            with open(path,'r') as file:
-                eeprom_adresses = json.load(file)
-            
-            self._eeprom_adresses =  eeprom_adresses
+            # Load calibration data from file
+            self._load_calib_json(path)
             
             
         self._DevConst = DevConst
@@ -239,9 +241,16 @@ class TPArray():
             
         
         # self._eeprom_adresses = ee
+
+    def _load_calib_json(self, path:Path):
         
-                
-    def _comp_eloff():
+        with open(path,'r') as file:
+            eeprom_adresses = json.load(file)
+        
+        self._eeprom_adresses =  eeprom_adresses
+
+            
+    def _comp_eloff(self):
         
         pass
         
