@@ -12,15 +12,15 @@ from hspytools.tparray import TPArray
 import matplotlib.pyplot as plt
 
 # %% Specify paths
-bcc_1234 = Path.cwd() / 'BCCs'  / '120x84_L3k9 1234.BCC'
+bcc_31 = Path.cwd() / 'BCCs'  / '60x40_L1k9_31.BCC'
 
 
 
 # %% 
 
-tparray = TPArray(120,84)
+tparray = TPArray(60,40)
 
-BCC = tparray.import_BCC(bcc_1234)
+BCC = tparray.import_BCC(bcc_31)
 
 # %%
 

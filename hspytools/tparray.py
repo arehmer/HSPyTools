@@ -61,6 +61,11 @@ class TPArray():
             self._fs = 27
             self._NETD = 140
             
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '32x32.json'
+            # Load calibration data from file
+            self._load_calib_json(path)  
+            
         elif (width,height) == (80,64):
             DevConst['VDDaddr']=6400
             DevConst['TAaddr']=6401
@@ -73,7 +78,12 @@ class TPArray():
             self._package_size = 1283
             self._fs = 41
             self._NETD = 70
-                      
+           
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '80x64.json'
+            # Load calibration data from file
+            self._load_calib_json(path)  
+            
         elif (width,height) == (120,84):
             DevConst['VDDaddr']=11760
             DevConst['TAaddr']=11761
@@ -104,6 +114,11 @@ class TPArray():
             self._package_size = 1159
             self._fs = 47
             self._NETD = 90
+            
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '60x40.json'
+            # Load calibration data from file
+            self._load_calib_json(path)  
 
         elif (width,height) == (160,120):
             DevConst['VDDaddr'] = int(160*120+120/12*160)
