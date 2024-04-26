@@ -325,7 +325,7 @@ class WatershedSeg(Seg):
         self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
                                                           'w_max':18,
                                                           'h_min':10,
-                                                          'h_max':30})
+                                                          'h_max':28})
         
         self.dist_thresh = attr_dict.pop('dist_thresh',[0,1,2])
         
