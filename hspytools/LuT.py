@@ -240,10 +240,8 @@ class LuT:
             
             # Check if Ud is outside of the range of the LuT
             row_idx = LuT.index < Ud
-            if not all(row_idx==False):
-                LuT_col = LuT.columns[col_idx][-1]
-                Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
-            else:
+            if all(row_idx==True) or all(row_idx==False):
+                # If so, skip
                 continue
             
             
