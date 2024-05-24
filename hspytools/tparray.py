@@ -94,7 +94,7 @@ class TPArray():
             
             self._package_num = 17
             self._package_size = 1401
-            self._fs = 28
+            self._fs = 20
             self._NETD = 130
             
             # path to array data
