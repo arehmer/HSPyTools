@@ -23,12 +23,12 @@
 		"adr_stop":  "0x0D"},
 
 	"vddMeas_th1": {
-		"dtype": "int16",
+		"dtype": "uint16",
 		"adr_start": "0x26",
 		"adr_stop":  "0x27"},
 
 	"vddMeas_th2": {
-		"dtype": "int16",
+		"dtype": "uint16",
 		"adr_start": "0x28",
 		"adr_stop":  "0x29"},
 
@@ -60,8 +60,7 @@
 	"vddScOff": {
 		"dtype": "uint8",
 		"adr_start": "0x4F",
-		"adr_stop":  "0x4F"},
-		
+		"adr_stop":  "0x4F"},		
 
 	"globalOff": {
 		"dtype": "int8",
@@ -81,8 +80,7 @@
 	"vddCompOff": {
 		"dtype": "int16",
 		"adr_start": "0x2E00",
-		"adr_stop":  "0x3B1F"},
-		
+		"adr_stop":  "0x3B1F"},		
 
 	"thGrad": {
 		"dtype": "int8",
