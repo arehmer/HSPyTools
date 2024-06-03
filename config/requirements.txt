@@ -1,4 +1,4 @@
-pandas<2.0.0
+pandas
 h5py
 numpy
 matplotlib
