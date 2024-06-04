@@ -103,7 +103,7 @@ class TPArray():
             self._package_size = 1401
             self._fs = 20
             self._NETD = 130
-            r_lim = 62.8
+            r_lim = 60
             
             self._mask = self._binary_mask(r_lim) 
             
@@ -124,6 +124,8 @@ class TPArray():
             self._package_size = 1159
             self._fs = 47
             self._NETD = 90
+            
+            self._mask = np.ones(self._npsize)
             
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '60x40.json'
