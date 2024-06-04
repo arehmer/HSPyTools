@@ -55,7 +55,8 @@ class Otsu():
         img_off = img + offset
         
         # Consider only non nan values 
-        img_off = img_off[~np.isnan(img_off)].flatten()
+        img_off = img_off[~np.isnan(img_off)]
+        img_off = img_off.flatten()
         
         # testing all thresholds from the minimum to the maximum of the image
         threshold_range = range(int(np.nanmin(img_off)+1),

@@ -335,7 +335,7 @@ class WatershedSeg(Seg):
         Warning('Remove thresholder and border in future releases!')
         Warning('Background mean set constant here. Delete background!')
         
-        c = 12
+        c = 8
         self.lap_kernel = np.array([[c/8, c/8, c/8], [c/8, -c, c/8], [c/8, c/8, c/8]],
                                    dtype=np.float32)
         self.morph_kernel = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]],
@@ -425,7 +425,7 @@ class WatershedSeg(Seg):
         img_thresh = self._threshold_frame(img,sharpen=False)
         img_thresh_sh = self._threshold_frame(img,sharpen=True)
         
-        img_preproc = [img_thresh,img_thresh_sh]
+        img_preproc = [img_thresh_sh]#[img_thresh]#,img_thresh_sh]
         
         
         pix_frame = {0:1,1:0,2:-1,3:-2}

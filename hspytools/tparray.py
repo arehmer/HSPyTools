@@ -19,6 +19,13 @@ class TPArray():
     
     def __init__(self,width,height):
         
+        
+        # Basic attributes
+        self._width = width
+        self._height = height
+        self._size = (width,height)
+        self._npsize = (height,width)
+        
         # Calculate order of data in bds file
         DevConst = {}
         
@@ -96,6 +103,9 @@ class TPArray():
             self._package_size = 1401
             self._fs = 20
             self._NETD = 130
+            r_lim = 62.8
+            
+            self._mask = self._binary_mask(r_lim) 
             
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '120x84.json'
@@ -139,12 +149,7 @@ class TPArray():
             self._load_calib_json(path)
             
             
-        self._DevConst = DevConst
-        self._width = width
-        self._height = height
-        self._size = (width,height)
-        self._npsize = (height,width)
-        
+        self._DevConst = DevConst        
         self._rowsPerBlock = int(height/DevConst['NROFBLOCKS'] / 2)
         self._pixelPerBlock = int(self._rowsPerBlock * width)
         self._PCSCALEVAL = 100000000
@@ -351,6 +356,9 @@ class TPArray():
             bcc[key] = self._convert_raw_bcc(raw_val,ee[key]['dtype'])
 
         
+        # Convert all EEPROM values from lists to numpy array
+        for key in bcc.keys():
+            bcc[key] = np.array(bcc[key]) 
         
         # Convert all arrays to appropriate shape and flip them
         # properly
@@ -422,7 +430,7 @@ class TPArray():
         
         
 
-    def _comp_thermal_offset(self,df_meas):
+    def _comp_thermal_offset(self,df_meas:pd.Series):
         
         ''' Thermal offset compensation '''
         
@@ -431,11 +439,10 @@ class TPArray():
         
         Pixel = df_meas[self._pix] 
         
-        # Pixel['pix0'] = 34099.48235294117
         
         # Get stuff for calculation
         ThGrad = self._bcc['thGrad'].reshape(size)
-        avgPtat = df_meas[self._PTAT].mean()
+        avgPtat = df_meas[self._PTAT].mean().item()
         gradScale = self._bcc['gradScale']
         ThOffset = self._bcc['thOff'].reshape(size)
         
@@ -591,12 +598,25 @@ class TPArray():
         no conversion in dK
         """
         
-        df_meas = self._comp_thermal_offset(df_meas.copy())
-        df_meas = self._comp_electrical_offset(df_meas)
-        df_meas = self._comp_vdd(df_meas)
-        df_meas = self._calc_Tamb0(df_meas)
+        df_calib = []
         
-        return df_meas
+        for i in df_meas.index:
+            
+            df_frame = df_meas.loc[i]
+            
+            df_frame = self._comp_thermal_offset(df_frame.copy())
+            df_frame = self._comp_electrical_offset(df_frame)
+            df_frame = self._comp_vdd(df_frame)
+            df_frame = self._comp_sens(df_frame)
+            df_frame = self._calc_Tamb0(df_frame)
+        
+            # Convert back to DataFrame
+            df_frame = pd.DataFrame(df_frame).transpose()
+            df_calib.append(df_frame)
+        
+        df_calib = pd.concat(df_calib)
+        
+        return df_calib
     
     
     def rawmeas_to_dK(self,df_meas):
@@ -607,7 +627,7 @@ class TPArray():
         
         # Perform all compensation operations on data
         df_meas = self.rawmeas_comp(df_meas)
-        df_meas = self._comp_sens(df_meas)
+        
         
         # Load LuT
         LuT = self.LuT.copy()
@@ -644,3 +664,41 @@ class TPArray():
 
         
         return df_meas
+    
+    def _binary_mask(self,r_lim:float)->np.ndarray:
+        """
+        Creates a binary mask that is 1 if distance from image center
+        is less of equal to r and 0 otherwise
+
+        Parameters
+        ----------
+        r_lim : float
+            Maximal distance in pixels from the center, where mask is supposed 
+            to be 1.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Calculate center
+        x_center = (self._width-1) / 2
+        y_center = (self._height-1) / 2
+        
+        # Initialize mask
+        mask = np.zeros(( self._height, self._width))
+        
+        # Create meshgrid of coordinates
+        y, x = np.meshgrid(np.arange(self._height), np.arange(self._width),
+                           indexing = 'ij')
+
+        
+        # Calculate the distance of each point from the center
+        r = np.sqrt((x - x_center)**2 + (y - y_center)**2)
+        
+        # Use numpy.where to set values to 0 if d is larger than r_lim
+        mask = np.where(r > r_lim, 0, 1)
+        
+        return mask
+        
