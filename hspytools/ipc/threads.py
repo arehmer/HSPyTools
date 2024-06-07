@@ -68,7 +68,7 @@ class UDP(WThread):
             
     def _target_function(self):
         
-        print('Executed upd thread: ' + str(time.time()-self.t0) )
+        # print('Executed upd thread: ' + str(time.time()-self.t0) )
         
         frame = self.udp_reader.read_continuous_bytestream(self.dev_id)
         
@@ -123,7 +123,7 @@ class Imshow(RThread):
         except:
             bboxes = pd.DataFrame(data=[])
         
-        print('Executed plot thread \n')
+        # print('Executed plot thread \n')
         
         return frame,bboxes
     
