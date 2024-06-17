@@ -145,7 +145,7 @@ class Imshow(RThread):
                 w = box['xbr'].item() - box['xtl'].item()
                 h = box['ybr'].item() - box['ytl'].item()
 
-                frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 0,1)
+                frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
             
             cv2.imshow(self.window_name,frame)
             cv2.waitKey(1)
