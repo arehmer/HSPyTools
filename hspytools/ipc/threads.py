@@ -53,7 +53,7 @@ class UDP(WThread):
         # Use object to bind htpa device available under dev_ip
         bound_devices = self.udp_reader.bind_tparray(dev_ip)
         self.dev_id = bound_devices[bound_devices['IP']==dev_ip].index.item()
-        print('Bound HTPA device with DevID: ' + str(self.dev_id) )
+        
         
         # Start continuous bytestream 
         self.udp_reader.start_continuous_bytestream(self.dev_id)
@@ -76,8 +76,13 @@ class UDP(WThread):
         
     def stop(self):
         
+        # Set attribute exit to stop run method of thread
         self._exit = True
+        
+        # Stop the stream
         self.udp_reader.stop_continuous_bytestream(self.dev_id)
+        
+        # Release the array
         self.udp_reader.release_tparray(self.dev_id)
         
         
@@ -150,13 +155,16 @@ class Imshow(RThread):
             cv2.imshow(self.window_name,frame)
             cv2.waitKey(1)
             
-            # The opencv window needs to be closed inside the run function,
-            # otherwise a window with the same name can never be opened until
-            # the console is restarted
-            if self._exit == True:
-                cv2.destroyWindow(self.window_name)
+            
+                        
+        # The opencv window needs to be closed inside the run function,
+        # otherwise a window with the same name can never be opened until
+        # the console is restarted
+        if self._exit == True:
+            cv2.destroyWindow(self.window_name)
             
         def stop(self):
 
             self._exit = True
+
 
