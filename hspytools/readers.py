@@ -13,6 +13,7 @@ import os
 import matplotlib
 import socket
 import re
+import time
 
 from .tparray import TPArray
 
@@ -534,7 +535,7 @@ class HTPA_UDPReader():
         Warning('Not implemented yet.')
         return None
     
-    def _clear_port(self,udp_socket,server_address):
+    def _read_port(self,udp_socket,server_address):
         """
         Read all packages available at the specified port and return the last
         one
@@ -552,28 +553,31 @@ class HTPA_UDPReader():
         
         clear = False
         
+        packages = []
+        
         # In order to prevent and endless loop that reads in package after 
         # package (e.g. if Appset is still continuously streaming), read in 
         # a maximum amount of packages that equals 10 whole frames
         p_max = 50 * self.tparray._package_num
         p = 0
-        
-        
+                
         while clear == False:
             
             try:
                 package = udp_socket.recv(self.tparray._package_size)
+                packages.append(package)
                 p = p + 1
             except:
                 clear = True
-                
+                break
+            
             if p > p_max:
-                return []
+                clear = True
+                break
+            
+            time.sleep(10/1000)
         
-        if p == 0:
-            package = []
-        
-        return package
+        return packages
             
     
     def bind_tparray(self,ip:str):
@@ -602,35 +606,52 @@ class HTPA_UDPReader():
         udp_socket.settimeout(1)
         
         # Try calling the device and check if it's a HTPA device
-        try:
-            # Stop any stream that might still continue, e.g. if program 
-            # crashed 
-            _ = udp_socket.sendto(bytes('x','utf-8'),server_address)
-            _ = udp_socket.sendto(bytes('x','utf-8'),server_address)
-            
-            # Try to call device
-            _ = udp_socket.sendto(bytes('Calling HTPA series devices',
-                                        'utf-8'),
-                                       server_address)
-        except:
-            Exception('Calling HTPA series device failed')
-            return None
+
+        # Stop any stream that might still continue, e.g. if program 
+        # crashed 
         
-        # Read in all packages at this server address to clear the port. 
-        # Keep only the last package which should be the answer to the call
-        call = self._clear_port(udp_socket,server_address)
+        # Send message to device to stop streaming bytes
+        for i in range(5):
+            udp_socket.sendto(bytes('X','utf-8'),server_address)
+            time.sleep(10/1000)
         
+        # Clear the port in case old packages are still on it
+        _ = self._read_port(udp_socket,server_address)
+        
+        # Try to call device
+        _ = udp_socket.sendto(bytes('Calling HTPA series devices',
+                                    'utf-8'),
+                                   server_address)
+
+
+        # The package following the call should contain device information
+        call = self._read_port(udp_socket,server_address)
         
         # If calling was successfull, extract basic information from the 
         # answer string
-        dev_info = self._callstring_to_information(call)
         
-        # Next try to bind the device
+        call_fail = False
+        
+        if len(call) == 1:
+            try:
+                dev_info = self._callstring_to_information(call[0])
+            except:
+                call_fail = True 
+        else:
+            call_fail = True
+            
+        if call_fail == True:
+            Exception('Calling HTPA series device failed')
+            return None
+        
+        # Next try to bind the device that answered the call        
         try:
             _ = udp_socket.sendto(bytes('Bind HTPA series device',
                                         'utf-8'),
                                        server_address)
-            bind = udp_socket.recv(self.tparray._package_size)
+            
+            # Read the answer to the bind command from socket
+            _ = self._read_port(udp_socket,server_address)
         except:
             Exception('Calling HTPA series device failed')
             return None
@@ -664,18 +685,19 @@ class HTPA_UDPReader():
         server_address = (dev_info['IP'].item(), self.port)
         
         # Send message to device to stop streaming bytes
-        _ = udp_socket.sendto(bytes('X','utf-8'),server_address)
-        _ = udp_socket.sendto(bytes('X','utf-8'),server_address)
+        for i in range(5):
+            udp_socket.sendto(bytes('X','utf-8'),server_address)
+            time.sleep(10/1000)
         
         # Clean up port
-        answ = self._clear_port(udp_socket,server_address)
+        answ = self._read_port(udp_socket,server_address)
         
         # Send message to release device
         _ = udp_socket.sendto(bytes('x Release HTPA series device','utf-8'),
                               server_address)
         
         # Clean up port
-        answ = self._clear_port(udp_socket,server_address)
+        answ = self._read_port(udp_socket,server_address)
         
         print('Released HTPA device with DevID: ' + str(dev_id) )
             
@@ -715,11 +737,13 @@ class HTPA_UDPReader():
         server_address = (dev_info['IP'].item(), self.port)
                 
         # Send message to device to stop streaming bytes
-        udp_socket.sendto(bytes('X','utf-8'),server_address)
-        udp_socket.sendto(bytes('X','utf-8'),server_address)   
+        for i in range(5):
+            udp_socket.sendto(bytes('X','utf-8'),server_address)
+            time.sleep(10/1000)
+
         
         # Clean up port
-        answ = self._clear_port(udp_socket,server_address)
+        answ = self._read_port(udp_socket,server_address)
         
         return answ
     
@@ -853,7 +877,7 @@ class HTPA_UDPReader():
     #         print('Successfully received frame')
         
     #     # Clean up whole port in which a second frame may or may not be
-    #     self._clear_port(udp_socket)
+    #     self._read_port(udp_socket)
         
     #     return frame
     
