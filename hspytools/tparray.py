@@ -30,9 +30,6 @@ class TPArray():
         DevConst = {}
         
         if (width,height) == (8,8):
-            DevConst['VDDaddr']=128
-            DevConst['TAaddr']=129
-            DevConst['PTaddr']=130
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=1
             DevConst['NROFPTAT']=1
@@ -43,9 +40,6 @@ class TPArray():
             self._NETD = 100
             
         elif (width,height) == (16,16):
-            DevConst['VDDaddr']=384
-            DevConst['TAaddr']=385
-            DevConst['PTaddr']=386
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=2
             DevConst['NROFPTAT']=2
@@ -56,9 +50,6 @@ class TPArray():
             self._NETD = 130
         
         elif (width,height) == (32,32):
-            DevConst['VDDaddr']=1280
-            DevConst['TAaddr']=1281
-            DevConst['PTaddr']=1282
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
@@ -74,12 +65,25 @@ class TPArray():
             self._load_calib_json(path)  
             
         elif (width,height) == (80,64):
-            DevConst['VDDaddr']=6400
-            DevConst['TAaddr']=6401
-            DevConst['PTaddr']=6402
-            DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
+            DevConst['ATCaddr']=0
+            
+            self._package_num = 10
+            self._package_size = 1283
+            self._fs = 41
+            self._NETD = 70
+           
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '80x64.json'
+            # Load calibration data from file
+            self._load_calib_json(path)  
+            
+        elif (width,height) == (60,84):
+            DevConst['NROFBLOCKS']=7
+            DevConst['NROFPTAT']=2
+            DevConst['ATCaddr']= 0
+                        
             
             self._package_num = 10
             self._package_size = 1283
@@ -92,9 +96,6 @@ class TPArray():
             self._load_calib_json(path)  
             
         elif (width,height) == (120,84):
-            DevConst['VDDaddr']=11760
-            DevConst['TAaddr']=11761
-            DevConst['PTaddr']=11762
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=6
             DevConst['NROFPTAT']=2
@@ -113,9 +114,6 @@ class TPArray():
             self._load_calib_json(path)
             
         elif (width,height) == (60,40):
-            DevConst['VDDaddr']=2880
-            DevConst['TAaddr']=2881
-            DevConst['PTaddr']=2882
             DevConst['ATCaddr']=1
             DevConst['NROFBLOCKS']=5
             DevConst['NROFPTAT']=2
@@ -133,9 +131,6 @@ class TPArray():
             self._load_calib_json(path)  
 
         elif (width,height) == (160,120):
-            DevConst['VDDaddr'] = int(160*120+120/12*160)
-            DevConst['TAaddr'] = DevConst['VDDaddr'] + 1
-            DevConst['PTaddr'] = DevConst['TAaddr'] + 1
             DevConst['ATCaddr'] = 1
             DevConst['NROFBLOCKS'] = 12
             DevConst['NROFPTAT'] = 2
@@ -150,13 +145,22 @@ class TPArray():
             # Load calibration data from file
             self._load_calib_json(path)
             
+        else:
+            raise Exception('This Thermopile Array is not known.') 
+         
+        # Remaining DevConst can be derived
+        DevConst['VDDaddr'] = \
+            int(width*height+height/DevConst['NROFBLOCKS']*width)   
+            
+        DevConst['TAaddr']=DevConst['VDDaddr'] + 1
+        DevConst['PTaddr']=DevConst['TAaddr'] + 1
             
         self._DevConst = DevConst        
         self._rowsPerBlock = int(height/DevConst['NROFBLOCKS'] / 2)
         self._pixelPerBlock = int(self._rowsPerBlock * width)
         self._PCSCALEVAL = 100000000
         
-        # Order of serial data from sensor type
+        # Derive order of serial data from DevConst
         # pixels
         pix = ['pix'+str(p) for p in range(0,width*height)]
         

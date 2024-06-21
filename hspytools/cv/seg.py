@@ -28,7 +28,7 @@ from scipy.cluster.vq import kmeans2
 from hspytools.cv.filters import Convolution
 from hspytools.cv.thresh import Otsu
 from hspytools.clust.gk import GK
-import cv2
+# import cv2
 
     
 class Seg():
@@ -307,259 +307,259 @@ class Seg():
         return img_thresh
 
 
-class WatershedSeg(Seg):
+# class WatershedSeg(Seg):
     
-    def __init__(self,**kwargs):
+#     def __init__(self,**kwargs):
         
-        init_dict =  kwargs.pop('init_dict',None)
+#         init_dict =  kwargs.pop('init_dict',None)
         
-        if init_dict is not None:
-            attr_dict = init_dict
-        else:
-            attr_dict = kwargs
-        
-        
-        self.w = attr_dict.pop('w',None)
-        self.h = attr_dict.pop('h',None)
-        
-        self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
-                                                          'w_max':18,
-                                                          'h_min':10,
-                                                          'h_max':28})
-        
-        self.dist_thresh = attr_dict.pop('dist_thresh',[0,1,2])
+#         if init_dict is not None:
+#             attr_dict = init_dict
+#         else:
+#             attr_dict = kwargs
         
         
-        self.thresholder = Otsu(**attr_dict)
+#         self.w = attr_dict.pop('w',None)
+#         self.h = attr_dict.pop('h',None)
         
-        Warning('Remove thresholder and border in future releases!')
-        Warning('Background mean set constant here. Delete background!')
+#         self.bbox_sizelim = attr_dict.pop('bbox_sizelim',{'w_min':5,
+#                                                           'w_max':18,
+#                                                           'h_min':10,
+#                                                           'h_max':28})
         
-        c = 8
-        self.lap_kernel = np.array([[c/8, c/8, c/8], [c/8, -c, c/8], [c/8, c/8, c/8]],
-                                   dtype=np.float32)
-        self.morph_kernel = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]],
-                                     dtype=np.uint8)
-        
-        self.img_seg = {}
+#         self.dist_thresh = attr_dict.pop('dist_thresh',[0,1,2])
         
         
+#         self.thresholder = Otsu(**attr_dict)
         
-        super().__init__(self.w,self.h,**attr_dict)
+#         Warning('Remove thresholder and border in future releases!')
+#         Warning('Background mean set constant here. Delete background!')
         
-    def save(self):
-        '''
-        Returns all non-private an non-builtin attributes of this class
-        as a dictionary with the purpose of reloading this instance from the
-        attribute dictionary. 
+#         c = 8
+#         self.lap_kernel = np.array([[c/8, c/8, c/8], [c/8, -c, c/8], [c/8, c/8, c/8]],
+#                                    dtype=np.float32)
+#         self.morph_kernel = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]],
+#                                      dtype=np.uint8)
+        
+#         self.img_seg = {}
+        
+        
+        
+#         super().__init__(self.w,self.h,**attr_dict)
+        
+#     def save(self):
+#         '''
+#         Returns all non-private an non-builtin attributes of this class
+#         as a dictionary with the purpose of reloading this instance from the
+#         attribute dictionary. 
 
-        Returns
-        -------
-        None.
+#         Returns
+#         -------
+#         None.
 
-        '''
+#         '''
         
-        attr_dict = { k:v for k,v in vars(self).items() if not k.startswith('_') }
+#         attr_dict = { k:v for k,v in vars(self).items() if not k.startswith('_') }
         
         
-        # save_path = folder / 'WatershedSeg.prop_engine'
-        # pkl.dump(attr_dict,open(save_path,'wb'))
+#         # save_path = folder / 'WatershedSeg.prop_engine'
+#         # pkl.dump(attr_dict,open(save_path,'wb'))
         
-        return attr_dict
+#         return attr_dict
     
-    def _threshold_frame(self,img,sharpen):
+#     def _threshold_frame(self,img,sharpen):
         
-        # Normalize image
-        # img = np.uint16(img)
-        img_orig = img.copy()
-        # img = cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
-        
-        
-        # Sharpen image to detect edges better
-        if sharpen==True:
-            img = self._sharpen_img(img)
+#         # Normalize image
+#         # img = np.uint16(img)
+#         img_orig = img.copy()
+#         # img = cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
         
         
-        _,img_above = self.thresholder.threshold(img)
+#         # Sharpen image to detect edges better
+#         if sharpen==True:
+#             img = self._sharpen_img(img)
         
-        img_above[~np.isnan(img_above)] = 255 #0
-        img_above[np.isnan(img_above)] = 0 #255
-        img_thresh = np.uint8(img_above)
+        
+#         _,img_above = self.thresholder.threshold(img)
+        
+#         img_above[~np.isnan(img_above)] = 255 #0
+#         img_above[np.isnan(img_above)] = 0 #255
+#         img_thresh = np.uint8(img_above)
         
 
-        return img_thresh
+#         return img_thresh
     
-    def _get_foreground(self,img,d_lim):
+#     def _get_foreground(self,img,d_lim):
 
-        # Use closing on the foreground to carve out the
-        # foreground better
-        img_fg = cv2.morphologyEx(img,cv2.MORPH_OPEN,
-                                  self.morph_kernel,
-                                  iterations = 1)
+#         # Use closing on the foreground to carve out the
+#         # foreground better
+#         img_fg = cv2.morphologyEx(img,cv2.MORPH_OPEN,
+#                                   self.morph_kernel,
+#                                   iterations = 1)
         
-        # Apply distance transformation
-        img_fg = cv2.distanceTransform(255-img_fg, cv2.DIST_L2, 3)
+#         # Apply distance transformation
+#         img_fg = cv2.distanceTransform(255-img_fg, cv2.DIST_L2, 3)
         
-        # Keep only pixels that are below a certain distance d to the next
-        # nonzero pixel as foreground
-        idx_fg = (img_fg<=d_lim)
+#         # Keep only pixels that are below a certain distance d to the next
+#         # nonzero pixel as foreground
+#         idx_fg = (img_fg<=d_lim)
         
-        # Set foreground to 255, background to 0
-        img_fg[~idx_fg] = 0
-        img_fg[idx_fg] = 255
+#         # Set foreground to 255, background to 0
+#         img_fg[~idx_fg] = 0
+#         img_fg[idx_fg] = 255
         
-        # Convert to proper type
-        img_fg = np.uint8(img_fg)
+#         # Convert to proper type
+#         img_fg = np.uint8(img_fg)
         
-        return img_fg
+#         return img_fg
     
-    def segment_frame(self,img):
+#     def segment_frame(self,img):
         
-        # Convert image to uint16
-        img = np.uint16(img)
+#         # Convert image to uint16
+#         img = np.uint16(img)
         
-        img_orig = img.copy()
+#         img_orig = img.copy()
         
-        # Threshold the image, once the original image and once a sharpened 
-        # version
-        img_thresh = self._threshold_frame(img,sharpen=False)
-        img_thresh_sh = self._threshold_frame(img,sharpen=True)
+#         # Threshold the image, once the original image and once a sharpened 
+#         # version
+#         img_thresh = self._threshold_frame(img,sharpen=False)
+#         img_thresh_sh = self._threshold_frame(img,sharpen=True)
         
-        img_preproc = [img_thresh_sh]#[img_thresh]#,img_thresh_sh]
+#         img_preproc = [img_thresh_sh]#[img_thresh]#,img_thresh_sh]
         
         
-        pix_frame = {0:1,1:0,2:-1,3:-2}
+#         pix_frame = {0:1,1:0,2:-1,3:-2}
         
-        proposed_boxes = []
+#         proposed_boxes = []
         
-        for img_pp in img_preproc:
+#         for img_pp in img_preproc:
         
-            for d in self.dist_thresh:
+#             for d in self.dist_thresh:
                 
-                # img_fg = img_dist.copy()
-                img_fg = self._get_foreground(img_pp,d)
+#                 # img_fg = img_dist.copy()
+#                 img_fg = self._get_foreground(img_pp,d)
                 
                 
-                # Get the background by dilating the foreground
-                img_bg = cv2.dilate(img_pp,
-                                    self.morph_kernel,
-                                    iterations=2)
+#                 # Get the background by dilating the foreground
+#                 img_bg = cv2.dilate(img_pp,
+#                                     self.morph_kernel,
+#                                     iterations=2)
 
                 
-                # By calculating the difference between background and foreground
-                # the unknown space is determined
-                unknown = cv2.subtract(img_bg,img_fg)
+#                 # By calculating the difference between background and foreground
+#                 # the unknown space is determined
+#                 unknown = cv2.subtract(img_bg,img_fg)
                 
-                # Get markers for watershed algorithm
-                _, markers = cv2.connectedComponents(img_fg,
-                                                     connectivity=4)
+#                 # Get markers for watershed algorithm
+#                 _, markers = cv2.connectedComponents(img_fg,
+#                                                      connectivity=4)
                 
-                # Convert to proper type
-                markers = markers.astype('int32')
+#                 # Convert to proper type
+#                 markers = markers.astype('int32')
                 
-                markers = markers + 1
+#                 markers = markers + 1
                 
-                # Label the unknown area with 0, i.e. to be determined by watershed
-                markers[unknown==255] = 0
+#                 # Label the unknown area with 0, i.e. to be determined by watershed
+#                 markers[unknown==255] = 0
                 
-                # add useless channels to image
-                img_seg = np.stack([img.copy(),
-                                np.zeros(img.shape),
-                                np.zeros(img.shape)],
-                               axis=2)
+#                 # add useless channels to image
+#                 img_seg = np.stack([img.copy(),
+#                                 np.zeros(img.shape),
+#                                 np.zeros(img.shape)],
+#                                axis=2)
                 
-                # Apply watershed
-                img_seg = cv2.watershed(np.uint8(img_seg), markers)
+#                 # Apply watershed
+#                 img_seg = cv2.watershed(np.uint8(img_seg), markers)
                 
-                # Write to attribute for debugging
-                self.img_seg[d] = img_seg
+#                 # Write to attribute for debugging
+#                 self.img_seg[d] = img_seg
                 
-                # Set -1 and 1 to zero. -1 are borders, 1 is the background
-                img_seg[img_seg==-1] = 0
-                img_seg[img_seg==1] = 0
+#                 # Set -1 and 1 to zero. -1 are borders, 1 is the background
+#                 img_seg[img_seg==-1] = 0
+#                 img_seg[img_seg==1] = 0
                 
-                # Get coordinates of all nonzero pixels
-                pix_y, pix_x = np.indices(img_seg.shape)
+#                 # Get coordinates of all nonzero pixels
+#                 pix_y, pix_x = np.indices(img_seg.shape)
         
-                pix_xy = np.vstack([pix_x.flatten(),pix_y.flatten()]).T 
+#                 pix_xy = np.vstack([pix_x.flatten(),pix_y.flatten()]).T 
                 
-                # create a dictionary mapping storing which pixels belong to which 
-                # cluster
-                clust_labels = set(np.unique(img_seg.flatten())) - set([0])
-                clust_labels = list (clust_labels)
+#                 # create a dictionary mapping storing which pixels belong to which 
+#                 # cluster
+#                 clust_labels = set(np.unique(img_seg.flatten())) - set([0])
+#                 clust_labels = list (clust_labels)
                 
-                clust_dict = {c:img_seg.flatten()==c 
-                              for c in clust_labels}
+#                 clust_dict = {c:img_seg.flatten()==c 
+#                               for c in clust_labels}
                 
-                # Create an array with 
-                bboxes = self.bboxes_from_clust(pix_xy,
-                                                clust_dict,
-                                                pix_frame = pix_frame[d])
+#                 # Create an array with 
+#                 bboxes = self.bboxes_from_clust(pix_xy,
+#                                                 clust_dict,
+#                                                 pix_frame = pix_frame[d])
             
-                proposed_boxes.append(bboxes)
+#                 proposed_boxes.append(bboxes)
         
-        # Due to a future warning of pandas, empty dataframes have to be 
-        # deleted before concatenation
-        proposed_boxes = [boxes for boxes in proposed_boxes \
-                          if len(boxes)!=0]
+#         # Due to a future warning of pandas, empty dataframes have to be 
+#         # deleted before concatenation
+#         proposed_boxes = [boxes for boxes in proposed_boxes \
+#                           if len(boxes)!=0]
         
-        # Concatenate
-        bboxes = pd.concat(proposed_boxes)
+#         # Concatenate
+#         bboxes = pd.concat(proposed_boxes)
         
-        # Reset index to make it unique
-        bboxes = bboxes.reset_index(drop=True)
+#         # Reset index to make it unique
+#         bboxes = bboxes.reset_index(drop=True)
         
-        # Calculate the mean of the background for HOG purposes
-        bg_mean = img_orig[img_bg==255].mean()
-        bboxes['bg_mean'] = bg_mean
+#         # Calculate the mean of the background for HOG purposes
+#         bg_mean = img_orig[img_bg==255].mean()
+#         bboxes['bg_mean'] = bg_mean
         
-        # Cast all columns to integers
-        bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
-                                'ybr':int,'bg_mean':int})
+#         # Cast all columns to integers
+#         bboxes = bboxes.astype({'xtl':int, 'ytl':int, 'xbr':int,
+#                                 'ybr':int,'bg_mean':int})
         
-        # Filter out boxes that are too small
-        bboxes = self._filter_bboxes(bboxes)
+#         # Filter out boxes that are too small
+#         bboxes = self._filter_bboxes(bboxes)
         
-        return bboxes
+#         return bboxes
     
-    def _sharpen_img(self,img):
+#     def _sharpen_img(self,img):
         
-        laplace_img = cv2.filter2D(img, cv2.CV_16U, self.lap_kernel)
-        # sharp_img = np.float32(img)
-        img = img - laplace_img
-        # sharp_img = np.clip(sharp_img, 0, 255)
-        # sharp_img = sharp_img.astype('uint8')
+#         laplace_img = cv2.filter2D(img, cv2.CV_16U, self.lap_kernel)
+#         # sharp_img = np.float32(img)
+#         img = img - laplace_img
+#         # sharp_img = np.clip(sharp_img, 0, 255)
+#         # sharp_img = sharp_img.astype('uint8')
         
-        return img
+#         return img
     
-    def _filter_bboxes(self,bboxes):
-        """
-        Applies customized heuristics for filtering out boundind boxes based on
-        certain criteria.
+#     def _filter_bboxes(self,bboxes):
+#         """
+#         Applies customized heuristics for filtering out boundind boxes based on
+#         certain criteria.
 
-        Parameters
-        ----------
-        bboxes : TYPE
-            DESCRIPTION.
+#         Parameters
+#         ----------
+#         bboxes : TYPE
+#             DESCRIPTION.
 
-        Returns
-        -------
-        None.
+#         Returns
+#         -------
+#         None.
 
-        """
+#         """
         
-        w_min = self.bbox_sizelim['w_min']
-        w_max = self.bbox_sizelim['w_max']
-        h_min = self.bbox_sizelim['h_min']
-        h_max = self.bbox_sizelim['h_max']
+#         w_min = self.bbox_sizelim['w_min']
+#         w_max = self.bbox_sizelim['w_max']
+#         h_min = self.bbox_sizelim['h_min']
+#         h_max = self.bbox_sizelim['h_max']
  
-        # Filter out boxes that are above or below a certain size 
-        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=w_min]
-        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=h_min]
-        bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=w_max]
-        bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=h_max]        
+#         # Filter out boxes that are above or below a certain size 
+#         bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])>=w_min]
+#         bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])>=h_min]
+#         bboxes = bboxes.loc[(bboxes['xbr'] - bboxes['xtl'])<=w_max]
+#         bboxes = bboxes.loc[(bboxes['ybr'] - bboxes['ytl'])<=h_max]        
         
-        return bboxes
+#         return bboxes
   
         
         
