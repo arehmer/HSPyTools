@@ -598,7 +598,7 @@ class TPArray():
         
         return df_meas
     
-    def rawmeas_comp(self,df_meas):
+    def rawmeas_comp(self,df_meas:pd.DataFrame):
         """
         Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
         no conversion in dK

@@ -41,8 +41,8 @@ class LuT:
     def LuT_from_xlsx(self,xlsx_path,sheet_name,**kwargs):
         
         index_col = kwargs.pop('index_col',0)
-        usecols = kwargs.pop('usecols','A,D:O')
-        skiprows = kwargs.pop('skiprows',12)
+        usecols = kwargs.pop('usecols','A,D:P')
+        skiprows = kwargs.pop('skiprows',13)
         header = kwargs.pop('header',0)
         # dtype = kwargs.pop('dtype','object')
         
