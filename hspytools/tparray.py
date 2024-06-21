@@ -91,7 +91,7 @@ class TPArray():
             self._NETD = 70
            
             # path to array data
-            path = Path(__file__).parent / 'arraytypes' / '80x64.json'
+            path = Path(__file__).parent / 'arraytypes' / '60x84.json'
             # Load calibration data from file
             self._load_calib_json(path)  
             
