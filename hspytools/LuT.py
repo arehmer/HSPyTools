@@ -8,7 +8,10 @@ Created on Thu Feb  8 16:11:36 2024
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
+
+
 
 class LuT:
     

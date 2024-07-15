@@ -277,7 +277,7 @@ class QuadriPolygon():
                 
             # Write line segment as line equation Tamb0 = a*Ud
             dv = v1 - v0
-            a = dv[u1]/dv[u0]
+            a = dv[u1]/(dv[u0]+1E-6)
             
             # Write line segment through point as line equation Tamb0 = d
             d = pnt[u1] - v0[u1]
