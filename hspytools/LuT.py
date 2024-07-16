@@ -153,7 +153,7 @@ class LuT:
                        index=True,
                        header=False)
         
-        writer.save()
+        writer.close()
             
     def LuT_from_HTPAxls(self,sheet_name,**kwargs):
               
