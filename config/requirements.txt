@@ -1,6 +1,6 @@
-pandas
+pandas==2.2.1
 h5py
-numpy
+numpy==2.0.0
 matplotlib
 scipy
 scikit-learn

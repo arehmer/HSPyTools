@@ -268,7 +268,11 @@ class hdf5_mgr():
         
         address = 'index'
         
-        return pd.read_hdf(self._hdf5_path, address)
+        df_index = pd.read_hdf(self._hdf5_path, address)
+        
+        df_index = df_index.astype(self.types)
+        
+        return df_index
     
     def load_meas(self,idx,**kwargs):
 
@@ -356,81 +360,6 @@ class hdf5_mgr():
             
             return success
         
-    # def write_to_mp4(self,video_name,folder_path,**kwargs):
-    #     """
-    #     Writes a video sequence already stored in the hdf5-file under the name
-    #     video_name to an mp4-file. Video will be saved in the folder specified 
-    #     in folder_path under the file name <video_name>.mp4
-        
-    #     Parameters
-    #     ----------
-    #     video_name : str
-    #         name under which the video is stored in the hdf5-file. If a 
-    #         postprocessed version of the video is to be addressed, then pass
-    #         'video_name/filtered' for example, or 'video_name/gradient'
-    #     folder_path : str
-    #         Path to the folder where the video should be saved. 
-
-            
-    #     Returns
-    #     -------
-    #     None.
-    #     """
-        
-    #     print('''For annotation purposes it is highly recommended to export the 
-    #           video sequence as png-images via write_to_png(). mp4 performs
-    #           interpolations between frames that to not reflect the original
-    #           sensor image and can deaviate from it.''')
-        
-    #     fs = kwargs.pop('fs',8)
-    #     appendix = kwargs.pop('appendix','')
-        
-    #     address = 'videos/' + video_name
-
-    #     # Load specified video sequence
-    #     df_video = pd.read_hdf(self._hdf5_path, address + '/data' + appendix)
-        
-    #     # Load size information
-    #     (w,h) = self.load_size(video_name)
-
-    #     # For writing to an image, only pixel values are needed
-    #     pixel_cols = df_video.columns[0:w*h]
-    #     df_video = df_video[pixel_cols]
-        
-                        
-    #     # Initialize video writer
-        
-    #     video_name = video_name.replace('/','_')
-        
-    #     video = cv2.VideoWriter(folder_path + '/' + video_name + '.mp4',
-    #                             cv2.VideoWriter_fourcc(*'H264'), 
-    #                             fs, (w,h), isColor = True)  
-                
-    #     # Get colormap
-    #     cmap = mpl.cm.get_cmap('plasma')      
-        
-    #     # Loop over all frames and write to mp4
-    #     for i in df_video.index:
-            
-    #         img = df_video.loc[i].values.reshape(h,w)
-            
-    #         img = ( img - img.min() ) / (img.max() - img.min())
-            
-    #         # img = img  / img.max()
-            
-    #         RGBA = (cmap(img)*255).astype('uint8')
-            
-    #         # RGBA = cmap(img)
-            
-    #         BGR = cv2.cvtColor(RGBA, cv2.COLOR_RGB2BGR)
-            
-    #         video.write(BGR)
-
-
-    #     cv2.destroyAllWindows()
-    #     video.release()
-       
-    #     return None
 
     def video_to_avi(self,unique_id,**kwargs):
         """
