@@ -44,7 +44,7 @@ class hdf5_mgr():
             self.tparray = None
         else:
             self.tparray = TPArray(width,height)
-        
+                
         # Check if file exists
         if os.path.isfile(hdf5_path) == True:
             file_exists = True
@@ -74,6 +74,8 @@ class hdf5_mgr():
         
         if is_empty:
             self._initialize_index()
+            
+        
         
     
     def _initialize_index(self):
@@ -478,4 +480,5 @@ class hdf5_mgr():
             reader.export_png(df_video,path)
             
         return path
+    
     
