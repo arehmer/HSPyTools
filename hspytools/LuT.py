@@ -164,8 +164,8 @@ class LuT:
         return None
         
     def inverse_eval_LuT(self,data:pd.DataFrame,
-                         Ta_col:str='Tamb0',
-                         To_col:str='To_meas')->pd.DataFrame:
+                         Ta:str='Tamb0',
+                         To:str='To_meas')->pd.DataFrame:
         """
         Converts measurements given in Kelvin back to Voltage in Digits.
 
@@ -196,49 +196,54 @@ class LuT:
         #       'and are converted to dK.')
         
         
-        data[[Ta_col,To_col]] = (data[[Ta_col,To_col]]*10).astype(int)
+        data[[Ta,To]] = (data[[Ta,To]]*10).astype(int)
+        
+        Ud_LuT = []
         
         for meas in data.index:
-            
-            LuT_copy = self.LuT.copy()
+
+            LuT = self.LuT
         
-            Ta_meas = data.loc[meas,Ta_col]
-            To_meas = data.loc[meas,To_col]
+            Ta_meas = data.loc[meas,Ta]
+            To_meas = data.loc[meas,To]
             
             # find the "last" column in old LuT that is smaller than the 
             # measured Ta 
-            col_idx = LuT_copy.columns < Ta_meas
-            LuT_col = LuT_copy.columns[col_idx][-1]
+            Ta_iloc = np.where(LuT.columns < Ta_meas)[0][-1]
+            Ta_cols = LuT.columns[Ta_iloc:Ta_iloc+2]
+                      
+            # create a column for the actually measured Tamb0 via interpolation
+            Tamb0  = int(np.round(Ta_meas))
+            f = (Tamb0-Ta_cols[0]) / (Ta_cols[1]-Ta_cols[0])
             
-            # get neighbouring column
-            Ta_col_n = LuT_copy.columns[LuT_copy.columns.get_loc(LuT_col)+1]
+            Tamb0_col = LuT[Ta_cols[0]] + \
+                (f*(LuT[Ta_cols[1]]-LuT[Ta_cols[0]])).astype(np.int32)
             
-            # create a new column by interpolation
-            new_col = int(np.round(Ta_meas))
-            f = (new_col-LuT_col) / (Ta_col_n-LuT_col)
-            LuT_copy[new_col] = LuT_copy[LuT_col] + \
-                f*(LuT_copy[Ta_col_n]-LuT_copy[LuT_col])
             
-            # Find index of las To in that column that is smaller than the measured To
-            Ud_row = LuT_copy.loc[LuT_copy[new_col]<To_meas].index[-1]
+            # Find index of last To in that column that is smaller than the 
+            # measured To and the next one (which is the first that is larger)
+            Ud_iloc = np.where(Tamb0_col.values<To_meas)[0][-1]
+            Ud_1 = Tamb0_col.index[Ud_iloc]
+            Ud_2 = Tamb0_col.index[Ud_iloc+1]
             
-            # get neighbouring row
-            Ud_row_n = LuT_copy.index[LuT_copy.index.get_loc(Ud_row)+1]
+            Ta_1 = Tamb0_col.loc[Ud_1]
+            Ta_2 = Tamb0_col.loc[Ud_2]
             
-            # Calculate Ud_est
-            dT = LuT_copy.loc[Ud_row_n,new_col] - LuT_copy.loc[Ud_row,new_col]
-            dU = Ud_row_n-Ud_row
+            dT = Ta_2 - Ta_1
+            dU = Ud_2 - Ud_1
             
             f =  dU/dT
             
-            data.loc[meas,'Ud_LuT'] = Ud_row + \
-                (To_meas - LuT_copy.loc[Ud_row,new_col]) * f
-                
+            Ud_LuT.append(Ud_1 +  (To_meas - Ta_1) * f)
+            
+               
+
+        data['Ud_LuT'] = Ud_LuT
         
         # print('Temperatures are converted back to Kelvin.')
-        data[[Ta_col,To_col]] = (data[[Ta_col,To_col]]/10)
+        data[[Ta,To]] = (data[[Ta,To]]/10)
         
-        return data
+        return None
         
     def eval_LuT(self,data,Ta_col='Tamb0',Ud_col='Ud'):
         
