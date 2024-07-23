@@ -14,6 +14,9 @@ import matplotlib
 import socket
 import re
 import time
+import subprocess
+import shutil
+
 
 from .tparray import TPArray
 
@@ -271,7 +274,8 @@ class HTPAdGUI_FileReader():
             
         # Then use pandas' to_csv() method to write the rest of the data to the
         # file
-        df_video.to_csv(txt_path, sep = ' ',mode='a')
+        df_video.to_csv(txt_path, sep = ' ',mode='a',
+                        header = False, index = False)
 
             
         return None    
@@ -320,82 +324,43 @@ class HTPAdGUI_FileReader():
         
         return None
 
-    # def export_avi(self,df_video,video_name,path,**kwargs):
-    #     """
-    #     A function for writing a video sequence given as a DataFrame to .avi
-    #     in a sepcified folder (path)
+    def export_mp4(self,df_video:pd.DataFrame,mp4_path:Path,**kwargs):
+        """
+        A function for writing a video sequence given as a DataFrame to .mp4
+        in a sepcified folder (path)
         
 
-    #     Parameters
-    #     ----------
-    #     df_video : pd.DataFrame
-    #         DESCRIPTION.
+        Parameters
+        ----------
+        df_video : pd.DataFrame
+            DESCRIPTION.
 
-    #     Returns
-    #     -------
-    #     None.
+        Returns
+        -------
+        None.
 
-    #     """        
+        """        
+        
+        # Framerate
+        fps = kwargs.pop('fps',8)
+        
+        # First, write the whole sequence as .png in a temporary folder
+        png_folder = mp4_path.parents[0] / 'png_temp'
+        
+        self.export_png(df_video,png_folder)
+        
+        
+        # Make a video from the .png files using subprocess with ffmpeg
+        os.chdir(png_folder)
+        subprocess.call([
+            'ffmpeg', '-framerate', str(fps), '-i', '%d.png', '-r', '30', '-pix_fmt', 'yuv420p',
+            mp4_path.as_posix()
+        ])
+        
+        # Remove temporary folder
+        shutil.rmtree(png_folder)
 
-    #     # Framerate
-    #     fps = kwargs.pop('fps',8)
-        
-    #     # Get shape of sensor array
-    #     size = self.tparray._size
-    #     npsize = self.tparray._npsize
-        
-    #     # Get columns with pixel values
-    #     pix_cols = self.tparray._pix
-        
-    #     # Get rid of everything else
-    #     df_video = df_video[pix_cols]
-        
-    #     if not path.exists():
-    #         path.mkdir(parents=True,exist_ok=False)
-        
-    #     # Initialize video writer
-    #     writer = imageio.get_writer((path / (video_name + '.avi')).as_posix(),
-    #                                 fps=fps,
-    #                                 macro_block_size=1)
-        
-    #     # codec = cv2.VideoWriter_fourcc(*'MJPG')
-    #     # codec = cv2.VideoWriter_fourcc(*'H264')
-        
-    #     # video = cv2.VideoWriter((path / (video_name + '.avi')).as_posix(),
-    #     #                         codec,
-    #     #                         fs,
-    #     #                         size,
-    #     #                         isColor = True)  
-                
-    #     # Get colormap
-    #     cmap = matplotlib.cm.get_cmap('plasma')      
-        
-    #     # Loop over all frames and write to mp4
-    #     for i in df_video.index:
-            
-    #         img = df_video.loc[i].values.reshape(npsize)
-            
-    #         # Normalization 
-    #         img = ( img - img.min() ) / (img.max() - img.min())
-            
-    #         # Apply colormap
-    #         RGBA = (cmap(img)*255).astype('uint8')
-            
-    #         # opencv
-    #         # BGR = cv2.cvtColor(RGBA, cv2.COLOR_RGB2BGR)
-    #         # video.write(BGR)
-            
-    #         # imageio_ffmpeg
-    #         writer.append_data(RGBA)
-
-    #     # opencv
-    #     # cv2.destroyAllWindows()
-    #     # video.release()
-        
-    #     # imageio_ffmpeg
-    #     writer.close()
-       
-    #     return None   
+        return None   
     
     def _scale_img(self,img):
         
