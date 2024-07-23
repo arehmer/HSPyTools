@@ -75,175 +75,13 @@ class hdf5_mgr():
         if is_empty:
             self._initialize_index()
             
-        
-        
+    
     
     def _initialize_index(self):
     
             df_index = pd.DataFrame(data = [])
-            df_index.to_hdf(self._hdf5_path, 'index')
+            df_index.to_hdf(self._hdf5_path, key = 'index')
     
-
-    def import_LuT(self,lut_path,device,**kwargs):
-        """
-        Import a Look up table to the hdf5-file that can be used to calculate
-        temperature-values from raw measurement data
-        
-
-        Parameters
-        ----------
-        lut_path : pathlib.Path()
-            DESCRIPTION.
-
-        Returns
-        -------
-        None.
-
-        """
-        
-        mode = kwargs.pop('mode','a')
-                
-        # Check if meas_path is given as pathlib path
-        if not isinstance(lut_path,Path):
-            print('lut_path must be given as pathlib.Path object')
-            return None
-        
-        # Convert device to list
-        if not isinstance(device,list):
-            device = [device]
-            
-        
-        # # Check if meas_path leads to a directory or a file
-        # if lut_path.is_file():
-        #     files = [lut_path]
-        # elif lut_path.is_dir():
-        #     files = [file for file in lut_path.iterdir()]
-        
-        
-        # # For now, import the data just as Christoph did, for compatibility
-        # for file in files:
-
-        # Name in group is the file name without extension
-        lut_name = lut_path.stem
-        
-        # Check if LuT already exists
-        with h5py.File(self._hdf5_path,'a') as hdf5_file:
-            
-            if 'LuT/' + lut_name in hdf5_file:
-                
-                print('LuT ' + lut_name + ' already exists.\n')
-                
-                if mode == 'w':
-                    print('Data is deleted and rewritten.\n')
-                    self.delete_group('LuT/'+lut_name)
-                else:
-                    print('No data is written to group. Pass mode="overwrite" \n to overwrite existing data.')
-                    return None
-    
-        
-        # Load LuT from file
-        LuT = self.tparray.import_LuT(lut_path)
-        
-        
-        # Dict for fields to write
-        data_to_write = {}
-        
-        # Convert every key in dictionary to pd DataFrame
-        for key in LuT:
-            if isinstance(LuT[key],np.ndarray):
-                df_key = pd.DataFrame(LuT[key])
-            else:
-                df_key = pd.DataFrame([LuT[key]],columns=[key])
-            
-            data_to_write['/LuT/' + lut_name + '/' + key] = \
-                df_key
-        
-        # Load the index, add information to which devices LuT belongs
-        df_index = self.load_index()
-        for d in device:
-            df_index.loc[df_index['device']==d,'LuT'] = lut_name
-        
-        data_to_write['index'] = df_index
-        
-        # Write to hdf5
-        try:
-            self._write_fields(data_to_write)
-            print(lut_name + ' successfully imported.')
-        except:
-            print('Some error occured when importing ' + lut_name + '.' )  
-                
-    def import_BCC(self,bcc_path,device,**kwargs):
-        """
-        Imports data from bcc file to the hdf5-file that can be used to calculate
-        temperature-values from raw measurement data
-        
-
-        Parameters
-        ----------
-        bcc_path : pathlib.Path()
-            DESCRIPTION.
-        device : int
-            Sensor ID
-
-        Returns
-        -------
-        None.
-
-        """
-        
-        mode = kwargs.pop('mode','a')
-        
-        # Check if meas_path is given as pathlib path
-        if not isinstance(bcc_path,Path):
-            print('bcc_path must be given as pathlib.Path object')
-            return None
-                   
-        file = bcc_path
-            
-        # Name in group is the file name without extension
-        bcc_name = file.stem
-        
-        # Check if BCC already exists
-        with h5py.File(self._hdf5_path,'a') as hdf5_file:
-            
-            if 'BCC/' + bcc_name in hdf5_file:
-                
-                print('BCC ' + bcc_name + ' already exists.\n')
-                
-                if mode == 'w':
-                    print('Data is deleted and rewritten.\n')
-                    self.delete_group('BCC/'+bcc_name)
-                else:
-                    print('No data is written to group. Pass mode="overwrite" \n to overwrite existing data.')
-                    return None
-        
-        # Get properties from bcc file
-        bcc = self.tparray.import_BCC(bcc_path)
-        
-        # Dict for fields to write
-        data_to_write = {}
-        
-        # Convert every key in dictionary to pd DataFrame
-        for key in bcc:
-            if isinstance(bcc[key],np.ndarray):
-                df_key = pd.DataFrame(bcc[key])
-            else:
-                df_key = pd.DataFrame([bcc[key]],columns=[key])
-            
-            data_to_write['/BCC/' + bcc_name + '/' + key] = \
-                df_key
-        
-        # Load the index, add information to which devices BCC belongs
-        df_index = self.load_index()
-        df_index.loc[df_index['device']==device,'BCC'] = bcc_name
-        
-        data_to_write['index'] = df_index
-        # Write to hdf5
-        try:
-            self._write_fields(data_to_write)
-            print(bcc_name + ' successfully imported.')
-        except:
-            print('Some error occured when importing ' + bcc_name + '.' )  
     
     def _write_fields(self,field_dict):
         """
@@ -411,7 +249,7 @@ class hdf5_mgr():
             df_video = self.load_df(a+'/data')
             
             # Get size information
-            (w,h) = (index.loc[u_id,'Width'],index.loc[u_id,'Height'])
+            (w,h) = (self.tparray.width,self.tparray.height)
             
             # Initialize a HTPAdGUI_FileReader, which has a function for 
             # writing DataFrames of video to .png

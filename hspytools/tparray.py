@@ -17,19 +17,19 @@ class TPArray():
     for reading from Bytestream
     """
     
-    def __init__(self,width,height):
+    def __init__(self,**attr_dict):
         
         
         # Basic attributes
-        self._width = width
-        self._height = height
-        self._size = (width,height)
-        self._npsize = (height,width)
+        self._width = attr_dict.pop('width',None)
+        self._height = attr_dict.pop('height',None)
+        self._size = (self.width,self.height)
+        self._npsize = (self.height,self.width)
         
         # Calculate order of data in bds file
         DevConst = {}
         
-        if (width,height) == (8,8):
+        if (self.width,self.height) == (8,8):
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=1
             DevConst['NROFPTAT']=1
@@ -39,7 +39,7 @@ class TPArray():
             self._fs = 160
             self._NETD = 100
             
-        elif (width,height) == (16,16):
+        elif (self.width,self.height) == (16,16):
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=2
             DevConst['NROFPTAT']=2
@@ -49,7 +49,7 @@ class TPArray():
             self._fs = 70
             self._NETD = 130
         
-        elif (width,height) == (32,32):
+        elif (self.width,self.height) == (32,32):
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
@@ -64,7 +64,7 @@ class TPArray():
             # Load calibration data from file
             self._load_calib_json(path)  
             
-        elif (width,height) == (80,64):
+        elif (self.width,self.height) == (80,64):
             DevConst['NROFBLOCKS']=4
             DevConst['NROFPTAT']=2
             DevConst['ATCaddr']=0
@@ -79,7 +79,7 @@ class TPArray():
             # Load calibration data from file
             self._load_calib_json(path)  
             
-        elif (width,height) == (60,84):
+        elif (self.width,self.height) == (60,84):
             DevConst['NROFBLOCKS']=7
             DevConst['NROFPTAT']=2
             DevConst['ATCaddr']= 0
@@ -95,7 +95,7 @@ class TPArray():
             # Load calibration data from file
             self._load_calib_json(path)  
             
-        elif (width,height) == (120,84):
+        elif (self.width,self.height) == (120,84):
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=6
             DevConst['NROFPTAT']=2
@@ -113,7 +113,7 @@ class TPArray():
             # Load calibration data from file
             self._load_calib_json(path)
             
-        elif (width,height) == (60,40):
+        elif (self.width,self.height) == (60,40):
             DevConst['ATCaddr']=1
             DevConst['NROFBLOCKS']=5
             DevConst['NROFPTAT']=2
@@ -130,7 +130,7 @@ class TPArray():
             # Load calibration data from file
             self._load_calib_json(path)  
 
-        elif (width,height) == (160,120):
+        elif (self.width,self.height) == (160,120):
             DevConst['ATCaddr'] = 1
             DevConst['NROFBLOCKS'] = 12
             DevConst['NROFPTAT'] = 2
@@ -150,22 +150,22 @@ class TPArray():
          
         # Remaining DevConst can be derived
         DevConst['VDDaddr'] = \
-            int(width*height+height/DevConst['NROFBLOCKS']*width)   
+            int(self.width*self.height+self.height/DevConst['NROFBLOCKS']*self.width)   
             
         DevConst['TAaddr']=DevConst['VDDaddr'] + 1
         DevConst['PTaddr']=DevConst['TAaddr'] + 1
             
         self._DevConst = DevConst        
-        self._rowsPerBlock = int(height/DevConst['NROFBLOCKS'] / 2)
-        self._pixelPerBlock = int(self._rowsPerBlock * width)
+        self._rowsPerBlock = int(self.height/DevConst['NROFBLOCKS'] / 2)
+        self._pixelPerBlock = int(self._rowsPerBlock * self.width)
         self._PCSCALEVAL = 100000000
         
         # Derive order of serial data from DevConst
         # pixels
-        pix = ['pix'+str(p) for p in range(0,width*height)]
+        pix = ['pix'+str(p) for p in range(0,self.width*self.height)]
         
         # electrical offsets
-        no_e_off = int(height/DevConst['NROFBLOCKS'] * width)
+        no_e_off = int(self.height/DevConst['NROFBLOCKS'] * self.width)
         e_off = ['e_off'+str(e) for e in range(0,no_e_off)]
         
         # voltage
@@ -198,76 +198,37 @@ class TPArray():
         
         self._serial_data_order = pix + e_off + vdd + T_amb + PTAT + ATC
         
-        
-        # Calculate order of data in bcc file
-        # initialize empty dictionary ee for eeprom adresses
-        ee = {}
-         
-        # # Code by Christoph
-        # ee['adr_pixcmin'] = np.array([0, 0])
-        # ee['adr_pixcmax'] = np.array([0, 4])
-        # ee['adr_gradScale'] = np.array([0, 8])
-        # ee['adr_epsilon'] = np.array([0, 13])
-        # ee['adr_vddMeas_th1'] = np.array([2, 6])
-        # ee['adr_vddMeas_th2'] = np.array([2, 8])
-        # ee['adr_ptatGrad'] = np.array([3, 4])
-        # ee['adr_ptatOffset'] = np.array([3, 8])
-        # ee['adr_ptat_th1'] = np.array([3, 12])
-        # ee['adr_ptat_th2'] = np.array([3, 14])
-        # ee['adr_vddScGrad'] = np.array([4, 14])
-        # ee['adr_vddScOff'] = np.array([4, 15])
-        # ee['adr_globalOff'] = np.array([5, 4])
-        # ee['adr_globalGain'] = np.array([5, 5])
-        
-        # ee['adr_vddCompGrad'] = np.array([0, 0])
-        # ee['adr_vddCompOff'] = np.array([0, 0])
-        # ee['adr_thGrad'] = np.array([0, 0])
-        # ee['adr_thOff'] = np.array([0, 0])
-        # ee['adr_pij'] = np.array([0, 0])
-        
-        # if (width,height) == (32,32):
-        #     ee['adr_vddCompGrad'][0] = 52
-        #     ee['adr_vddCompOff'][0] = 84
-        #     ee['adr_thGrad'][0] = 116
-        #     ee['adr_thOff'][0] = 244
-        #     ee['adr_pij'][0] = 372
-            
-        # elif (width,height) == (80,64):
-        #     ee['adr_vddCompGrad'][0] = 128
-        #     ee['adr_vddCompOff'][0] = 288
-        #     ee['adr_thGrad'][0] = 448
-        #     ee['adr_thOff'][0] = 768
-        #     ee['adr_pij'][0] = 1408
-            
-        # elif (width,height) == (60,84):
-        #     ee['adr_vddCompGrad'][0] = 293
-        #     ee['adr_vddCompOff'][0] = 383
-        #     ee['adr_thGrad'][0] = 473
-        #     ee['adr_thOff'][0] = 788
-        #     ee['adr_pij'][0] = 1418
-            
-        # elif (width,height) == (60,40):
-            
-        #     ee['adr_vddCompGrad'][0] = 1028
-        #     ee['adr_vddCompOff'][0] = 1088
-        #     ee['adr_thGrad'][0] = 1148
-        #     ee['adr_thOff'][0] = 1448
-        #     ee['adr_pij'][0] = 1748
-        
-        # elif (width,height) == (160,120):
-            
-        #     ee['adr_vddCompGrad'][0] = 528
-        #     ee['adr_vddCompOff'][0] = 728
-        #     ee['adr_thGrad'][0] = 928
-        #     ee['adr_thOff'][0] = 3328
-        #     ee['adr_pij'][0] = 5728
-            
-        # else:
-        #     raise Exception('Implement EEPROM Map for this array type!')
-            
-        
-        # self._eeprom_adresses = ee
+    @property
+    def width(self):
+        return self._width
+    @width.setter
+    def width(self,w):
+        self._width = w
+    
+    @property
+    def height(self):
+        return self._height
+    @height.setter
+    def height(self,h):
+        self._height = h
 
+    # @property
+    # def size(self):
+    #     return self._height
+    # @size.setter
+    # def size(self,size):
+    #     self._size = size
+
+    # @property
+    # def npsize(self):
+    #     return self._npsize
+    # @npsize.setter
+    # def height(self,npsize):
+    #     self._npsize = npsize        
+        
+        
+        
+        
     def _load_calib_json(self, path:Path):
         
         with open(path,'r') as file:
@@ -465,9 +426,7 @@ class TPArray():
         ''' Electrical offset compensation '''
         ElOff = df_meas[self._e_off]
         
-        # Only for this function reverse self._size for easy use in numpy
-        size = (self._size[1],self._size[0])
-        
+      
         Pixel = df_meas[self._pix] 
         
         
@@ -499,9 +458,6 @@ class TPArray():
     def _comp_vdd(self,df_meas):
         
         ''' Vdd compensation '''
-        
-        # Only for this function reverse self._size for easy use in numpy
-        size = (self._size[1],self._size[0])
         
         Pixel = df_meas[self._pix] 
         
@@ -559,9 +515,6 @@ class TPArray():
         return df_meas
     
     def _comp_sens(self,df_meas):
-        
-        # Only for this function reverse self._size for easy use in numpy
-        size = (self._size[1],self._size[0])
         
         Pixel = df_meas[self._pix] 
         
@@ -707,4 +660,62 @@ class TPArray():
         mask = np.where(r > r_lim, 0, 1)
         
         return mask
+    
+    def save(self):
+        '''
+        Returns all non-private an non-builtin attributes of this class
+        as a dictionary with the purpose of reloading this instance from the
+        attribute dictionary. 
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        
+        
+        # Get all names of properties of the instance by doing
+        properties = []
+        for d in dir(self):
+            if isinstance(getattr(type(self), d, None), property):
+                properties.append(d)
+                
+        
+        # Save all properties to an attr_dict
+        # Some properties have their own save-method. Use that, where available
+        attr_dict = {}
+        
+        # Loop over property keys
+        for p in properties:
+            
+            # Get property value
+            prop = getattr(self,p) 
+            
+            # Check if prop has a save method
+            save_method = getattr(prop, "save", None)
+            
+            # Check if its a callable method
+            if callable(save_method):
+                # If its a callable save method, call it
+                attr_dict[p] = {}
+                attr_dict[p] = save_method()
+            else:
+                attr_dict[p] = prop
+                
+        # Get all class attributes as well
+        class_dict = {}
+        for attribute in TPArray.__dict__.keys():
+            # Check if it's a built-in type
+            if (attribute[:2] != '__') and attribute not in attr_dict :
+                # Check if its a method
+                value = getattr(TPArray, attribute)
+                if not callable(value):
+                    # If not append to dict
+                    class_dict[attribute] = value
+        
+        # Concatenate both
+        attr_dict.update(class_dict)
+            
+        return attr_dict 
         

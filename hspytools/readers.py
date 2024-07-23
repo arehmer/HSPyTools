@@ -27,7 +27,8 @@ class HTPAdGUI_FileReader():
         
         # Depending on the sensor size, the content of the bds-file is
         # organized as follows
-        self.tparray = TPArray(width,height)
+        self.tparray = TPArray(width = width,
+                               height = height)
         # data_order = ArrayType.get_serial_data_order()
                 
     def read_htpa_video(self,path):
@@ -51,6 +52,11 @@ class HTPAdGUI_FileReader():
     
     def _import_txt(self,path,**kwargs):
         
+        # Read the very first line, which contains the header
+        with open(path) as file:
+            header = file.readline()
+        
+        # Use pandas' read_csv() method to read in the rest of the file
         sep = kwargs.pop('sep',' ')
         skiprows = kwargs.pop('skiprows',1)
         
@@ -74,7 +80,6 @@ class HTPAdGUI_FileReader():
         txt_content.index = range(0,len(txt_content))
         txt_content.index.name = 'image_id'
         
-        header = None
         
         return txt_content, header
     
@@ -223,6 +228,53 @@ class HTPAdGUI_FileReader():
             [bds_file.write(b) for b in bds_content]
             
         return None
+
+    def export_txt(self,df_video,header,txt_path,**kwargs):
+        """
+        Export a video sequence in dataframe format to a .txt file that is
+        compatible with HTPAdGUI
+        
+
+        Parameters
+        ----------
+        df_video : pd.DataFrame
+            DESCRIPTION.
+        header : byte
+            DESCRIPTION.
+        txt_path : pathlib.Path
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        mode = kwargs.pop('mode','x')
+        
+        
+        # Check if file already exists
+        if txt_path.exists():
+            if mode=='x':
+                print('File exists. No data will be written. Pass mode="x" to overwrite.')
+            elif mode=='w':
+                print('File exists and will be overwritten.')
+                os.remove(txt_path)
+        else:
+            # if it doesn't, create it
+            with open(txt_path, 'w') as file:
+                pass
+            
+        # first write the header to the file
+        with open(txt_path, 'w') as file:
+            header = file.writelines([header])
+            
+        # Then use pandas' to_csv() method to write the rest of the data to the
+        # file
+        df_video.to_csv(txt_path, sep = ' ',mode='a')
+
+            
+        return None    
     
     def export_png(self,df_video,path):
         """

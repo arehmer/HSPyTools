@@ -163,8 +163,29 @@ class LuT:
         
         return None
         
-    def inverse_eval_LuT(self,data,Ta_col='Tamb0',To_col='To_meas'):
-        
+    def inverse_eval_LuT(self,data:pd.DataFrame,
+                         Ta_col:str='Tamb0',
+                         To_col:str='To_meas')->pd.DataFrame:
+        """
+        Converts measurements given in Kelvin back to Voltage in Digits.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            DESCRIPTION.
+        Ta_col : str, optional
+            Column label of column containing ambient temperature in Kelvin. 
+            The default is 'Tamb0'.
+        To_col : str, optional
+            Column label of column containing measured object temperature in 
+            Kelvin. The default is 'To_meas'.
+
+        Returns
+        -------
+        data : TYPE
+            DESCRIPTION.
+
+        """
         # Check if index is unique, otherwise loop will exract more than one
         # measurement per loop and algorithm brakes down
         if not data.index.is_unique:
