@@ -353,7 +353,8 @@ class HTPAdGUI_FileReader():
         # Make a video from the .png files using subprocess with ffmpeg
         os.chdir(png_folder)
         subprocess.call([
-            'ffmpeg', '-framerate', str(fps), '-i', '%d.png', '-r', '30', '-pix_fmt', 'yuv420p',
+            'ffmpeg', '-framerate', str(fps), '-i', '%d.png', '-r', str(fps),
+            '-crf','18','-pix_fmt', 'yuv420p',
             mp4_path.as_posix()
         ])
         
