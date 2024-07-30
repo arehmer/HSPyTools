@@ -343,6 +343,7 @@ class HTPAdGUI_FileReader():
         
         # Framerate
         fps = kwargs.pop('fps',8)
+        crf = kwargs.pop('crf',5)
         
         # First, write the whole sequence as .png in a temporary folder
         png_folder = mp4_path.parents[0] / 'png_temp'
@@ -353,10 +354,12 @@ class HTPAdGUI_FileReader():
         # Make a video from the .png files using subprocess with ffmpeg
         os.chdir(png_folder)
         subprocess.call([
-            'ffmpeg', '-framerate', str(fps), '-i', '%d.png', '-r', str(fps),
-            '-crf','18','-pix_fmt', 'yuv420p',
-            mp4_path.as_posix()
-        ])
+            'ffmpeg', '-framerate', str(fps),
+            '-i', '%d.png',
+            '-r', str(fps),
+            '-crf',str(crf),
+            '-pix_fmt', 'yuv420p',
+            mp4_path.as_posix()])
         
         # Remove temporary folder
         shutil.rmtree(png_folder)
@@ -370,17 +373,18 @@ class HTPAdGUI_FileReader():
         h = self.tparray._height
         
         # Crop image by 10 % circumferential
-        crop_w = int(np.ceil(0.1*w))
-        crop_h = int(np.ceil(0.1*h))
+        # crop_w = int(np.ceil(0.1*w))
+        # crop_h = int(np.ceil(0.1*h))
         
         # Crop the image by 3 pixels to get rid of corners.
-        img_crop = img[crop_h:h-crop_h,crop_w:w-crop_w]
+        # img_crop = img[crop_h:h-crop_h,crop_w:w-crop_w]
         
         # Use the pixel values in the cropped frame to scale the image
-        dK_max  = img_crop.max()
-        dK_min  = img_crop.min()
+        dK_max  = img.max()
+        dK_min  = img.min()
         
-        img = ( img - dK_min ) / (dK_max - dK_min)
+        if (dK_max - dK_min) != 0:
+            img = ( img - dK_min ) / (dK_max - dK_min)
         
         img[img<=0] = 0
 

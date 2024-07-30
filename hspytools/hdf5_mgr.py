@@ -177,28 +177,37 @@ class hdf5_mgr():
         with h5py.File(self._hdf5_path,  'a') as hdf5_file:
             
             if target in hdf5_file:
+                target_exists = True
                 print('Target group already exists.\n')
-            
-                if mode == 'w':
-                    print('Target group is deleted and rewritten.\n')
-                    self.delete_group(target)
-                    
-                    # copy specified groups in source to target
-                    for group in groups:
-                        hdf5_file.copy(source+'/'+group,target+'/'+group)
-                        
-                    success = True
-                    
-                else:
-                    print('No data is written to group. Pass mode="w" \n to overwrite existing data.')
-            else:    
-                # copy soecified groups in source to target
+            else:
+                target_exists = False
+                
+        if target_exists==True and mode == 'w':
+            # Delete existing group if mode='w'
+            with h5py.File(self._hdf5_path,  'a') as hdf5_file:
+                
+                print('Target group is deleted and rewritten.\n')
+                self.delete_group(target)
+                
+                # copy specified groups in source to target
                 for group in groups:
                     hdf5_file.copy(source+'/'+group,target+'/'+group)
-                
+                    
                 success = True
-            
-            return success
+                
+        elif target_exists==False:
+            with h5py.File(self._hdf5_path,'a') as hdf5_file:
+                
+                # copy specified groups in source to target
+                for group in groups:
+                    hdf5_file.copy(source+'/'+group,target+'/'+group)
+                    
+                success = True
+                
+        elif target_exists==True and mode != 'w':
+            print('No data is written to group. Pass mode="w" \n to overwrite existing data.')
+                       
+        return success
         
 
     def video_to_avi(self,unique_id,**kwargs):
