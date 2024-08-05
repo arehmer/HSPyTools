@@ -44,8 +44,8 @@ class LuT:
     def LuT_from_xlsx(self,xlsx_path,sheet_name,**kwargs):
         
         index_col = kwargs.pop('index_col',0)
-        usecols = kwargs.pop('usecols','A,D:P')
-        skiprows = kwargs.pop('skiprows',13)
+        usecols = kwargs.pop('usecols','A,D:O')
+        skiprows = kwargs.pop('skiprows',12)
         header = kwargs.pop('header',0)
         # dtype = kwargs.pop('dtype','object')
         
@@ -156,9 +156,9 @@ class LuT:
         writer.close()
             
     def LuT_from_HTPAxls(self,sheet_name,**kwargs):
-              
-        xlsx_path = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
+        xlsx_standard = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
         
+        xlsx_path = kwargs.pop('xlsx_path',xlsx_standard)
         self.LuT_from_xlsx(xlsx_path,sheet_name,**kwargs)
         
         return None

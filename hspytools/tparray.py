@@ -82,7 +82,7 @@ class TPArray():
         elif (self.width,self.height) == (60,84):
             DevConst['NROFBLOCKS']=7
             DevConst['NROFPTAT']=2
-            DevConst['ATCaddr']= 0
+            DevConst['ATCaddr']= 1
                         
             
             self._package_num = 10
