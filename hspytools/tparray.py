@@ -39,6 +39,12 @@ class TPArray():
             self._fs = 160
             self._NETD = 100
             
+            print('8x8.json has not yet been tested!')
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '8x8.json'
+            # Load calibration data from file
+            self._load_calib_json(path)  
+            
         elif (self.width,self.height) == (16,16):
             DevConst['ATCaddr']=0
             DevConst['NROFBLOCKS']=2
@@ -48,6 +54,12 @@ class TPArray():
             self._package_size = 780
             self._fs = 70
             self._NETD = 130
+            
+            print('16x16.json has not yet been tested!')
+            # path to array data
+            path = Path(__file__).parent / 'arraytypes' / '16x16.json'
+            # Load calibration data from file
+            self._load_calib_json(path)  
         
         elif (self.width,self.height) == (32,32):
             DevConst['ATCaddr']=0
@@ -336,8 +348,7 @@ class TPArray():
         NROFBLOCKS = self.get_DevConst()['NROFBLOCKS']
         vdd_size = (int(self._height/NROFBLOCKS),self._width)
         
-        bcc['vddCompGrad'] = np.array(bcc['vddCompGrad']).reshape(vdd_size)
-        bcc['vddCompOff'] = np.array(bcc['vddCompOff']).reshape(vdd_size)
+
         
         # The lower half needs to be flipped vertically
         bcc['pij'][int(self._height/2):,::] = \
@@ -350,11 +361,16 @@ class TPArray():
             np.flipud(bcc['thOff'][int(self._height/2):,::])
 
         
-        bcc['vddCompGrad'][int(vdd_size[0]/2):,::] = \
-            np.flipud(bcc['vddCompGrad'][int(vdd_size[0]/2):,::])
-        
-        bcc['vddCompOff'][int(vdd_size[0]/2):,::] = \
-            np.flipud(bcc['vddCompOff'][int(vdd_size[0]/2):,::])
+        # Only 8x8 Arrays don't have vdd calibration data
+        if not (self.width,self.height) == (8,8):
+            bcc['vddCompGrad'] = np.array(bcc['vddCompGrad']).reshape(vdd_size)
+            bcc['vddCompOff'] = np.array(bcc['vddCompOff']).reshape(vdd_size)
+            
+            bcc['vddCompGrad'][int(vdd_size[0]/2):,::] = \
+                np.flipud(bcc['vddCompGrad'][int(vdd_size[0]/2):,::])
+            
+            bcc['vddCompOff'][int(vdd_size[0]/2):,::] = \
+                np.flipud(bcc['vddCompOff'][int(vdd_size[0]/2):,::])
         
         
         self._bcc = bcc 
@@ -405,7 +421,7 @@ class TPArray():
         size = (self._size[1],self._size[0])
         
         Pixel = df_meas[self._pix] 
-        
+        pixel_dtype = df_meas[self._pix].dtypes
         
         # Get stuff for calculation
         ThGrad = self._bcc['thGrad'].reshape(size)
@@ -417,7 +433,7 @@ class TPArray():
             (ThGrad*avgPtat) / np.power(2*np.ones(size),gradScale) -\
                 ThOffset
          
-        df_meas.loc[self._pix] = V_th_comp.flatten()
+        df_meas.loc[self._pix] = V_th_comp.flatten().astype(pixel_dtype)
         
         return df_meas
     
@@ -446,8 +462,8 @@ class TPArray():
                                ElOff_lower_half])
             
         elif self._DevConst['NROFPTAT']==1:
-            print('Yet to be implemented! Ask Bodo or Christoph!')
-            return None
+            # print('Yet to be implemented! Ask Bodo or Christoph!')
+            pass
         
         V_el_comp = Pixel.values - ElOff.values
         
@@ -517,6 +533,8 @@ class TPArray():
     def _comp_sens(self,df_meas):
         
         Pixel = df_meas[self._pix] 
+        pixel_dtype = df_meas[self._pix].dtypes
+
         
         # Get stuff for calculation
         Pij = self._bcc['pij']
@@ -534,7 +552,7 @@ class TPArray():
         VijPixC =  Pixel * self._PCSCALEVAL / PixC.flatten()
         
         # Write to dataframe
-        df_meas.loc[self._pix] = VijPixC
+        df_meas.loc[self._pix] = VijPixC.astype(pixel_dtype)
         
         return df_meas
         
@@ -542,12 +560,15 @@ class TPArray():
         
         ptat_av = df_meas[self._PTAT].mean()
         
+        
+        
         ptat_grad = self._bcc['ptatGrad']
         ptat_off = self._bcc['ptatOffset']
         
         Tamb0 = ptat_av*ptat_grad+ptat_off
         
-        df_meas.loc[self._T_amb] = Tamb0
+        dtype = df_meas.loc[self._T_amb].dtypes
+        df_meas.loc[self._T_amb] = Tamb0.astype(dtype)
         
         return df_meas
     
@@ -565,7 +586,10 @@ class TPArray():
             
             df_frame = self._comp_thermal_offset(df_frame.copy())
             df_frame = self._comp_electrical_offset(df_frame)
-            df_frame = self._comp_vdd(df_frame)
+            
+            if not (self.width,self.height) == (8,8) :
+                df_frame = self._comp_vdd(df_frame)
+            
             df_frame = self._comp_sens(df_frame)
             df_frame = self._calc_Tamb0(df_frame)
         
