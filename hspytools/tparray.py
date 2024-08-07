@@ -423,12 +423,18 @@ class TPArray():
         
         # Get stuff for calculation
         ThGrad = self._bcc['thGrad'].reshape(size)
-        avgPtat = df_meas[self._PTAT].mean().item()
+        # avgPtat = df_meas[self._PTAT].mean().item()
         gradScale = self._bcc['gradScale']
         ThOffset = self._bcc['thOff'].reshape(size)
         
+        
+        if (self.width,self.height) == (8,8):
+            T_depend = df_meas[self._T_amb].item()
+        else:
+            T_depend = df_meas[self._PTAT].mean().item()
+            
         V_th_comp = Pixel.values.reshape(size) -\
-            (ThGrad*avgPtat) / np.power(2*np.ones(size),gradScale) -\
+            (ThGrad*T_depend) / np.power(2*np.ones(size),gradScale) -\
                 ThOffset
          
         df_meas.loc[self._pix] = V_th_comp.flatten().astype(pixel_dtype)
@@ -581,6 +587,7 @@ class TPArray():
         for i in df_meas.index:
             
             df_frame = df_meas.loc[i]
+            
             
             df_frame = self._comp_thermal_offset(df_frame.copy())
             df_frame = self._comp_electrical_offset(df_frame)
