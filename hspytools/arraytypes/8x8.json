@@ -45,7 +45,7 @@
 		"adr_stop":  "0xFF"},
 
 	"thOff": {
-		"dtype": "uint16",
+		"dtype": "int16",
 		"adr_start": "0x100",
 		"adr_stop":  "0x17F"},
 
