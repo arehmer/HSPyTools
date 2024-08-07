@@ -344,25 +344,24 @@ class TPArray():
         bcc['pij'] = np.array(bcc['pij']).reshape(self._npsize)
         bcc['thGrad'] = np.array(bcc['thGrad']).reshape(self._npsize)
         bcc['thOff'] = np.array(bcc['thOff']).reshape(self._npsize)
-        
-        NROFBLOCKS = self.get_DevConst()['NROFBLOCKS']
-        vdd_size = (int(self._height/NROFBLOCKS),self._width)
-        
-
-        
-        # The lower half needs to be flipped vertically
-        bcc['pij'][int(self._height/2):,::] = \
-            np.flipud(bcc['pij'][int(self._height/2):,::])
-        
-        bcc['thGrad'][int(self._height/2):,::] = \
-            np.flipud(bcc['thGrad'][int(self._height/2):,::])
-            
-        bcc['thOff'][int(self._height/2):,::] = \
-            np.flipud(bcc['thOff'][int(self._height/2):,::])
-
-        
-        # Only 8x8 Arrays don't have vdd calibration data
+                
+        # Only 8x8 Arrays don't have vdd calibration data and pij, thGrad and 
+        # thOff are not flipped
         if not (self.width,self.height) == (8,8):
+            
+            NROFBLOCKS = self.get_DevConst()['NROFBLOCKS']
+            vdd_size = (int(self._height/NROFBLOCKS),self._width)
+                        
+            # The lower half needs to be flipped vertically
+            bcc['pij'][int(self._height/2):,::] = \
+                np.flipud(bcc['pij'][int(self._height/2):,::])
+            
+            bcc['thGrad'][int(self._height/2):,::] = \
+                np.flipud(bcc['thGrad'][int(self._height/2):,::])
+                
+            bcc['thOff'][int(self._height/2):,::] = \
+                np.flipud(bcc['thOff'][int(self._height/2):,::])
+            
             bcc['vddCompGrad'] = np.array(bcc['vddCompGrad']).reshape(vdd_size)
             bcc['vddCompOff'] = np.array(bcc['vddCompOff']).reshape(vdd_size)
             
@@ -371,7 +370,6 @@ class TPArray():
             
             bcc['vddCompOff'][int(vdd_size[0]/2):,::] = \
                 np.flipud(bcc['vddCompOff'][int(vdd_size[0]/2):,::])
-        
         
         self._bcc = bcc 
         
