@@ -110,10 +110,10 @@ class hdf5_mgr():
         
         df_index = pd.read_hdf(self._hdf5_path, address)
         
-        if 'stage' not in df_index.columns:
-            df_index['stage'] = None
+        # if 'stage' not in df_index.columns:
+        #     df_index['stage'] = None
         
-        df_index = df_index.astype(self.types)
+        # df_index = df_index.astype(self.types)
         
         return df_index
     
