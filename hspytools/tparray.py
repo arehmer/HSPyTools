@@ -10,6 +10,7 @@ import pandas as pd
 import json
 from pathlib import Path
 import struct
+import matplotlib.pyplot as plt
 
 class TPArray():
     """
@@ -480,6 +481,7 @@ class TPArray():
         ''' Vdd compensation '''
         
         Pixel = df_meas[self._pix] 
+        pixel_dtype = df_meas[self._pix].dtypes
         
         # Get stuff for calculation
         vddCompGrad = self._bcc['vddCompGrad']
@@ -530,7 +532,7 @@ class TPArray():
         
         V_vdd_comp = Pixel.values - vdd
         
-        df_meas.loc[self._pix] = V_vdd_comp.flatten()
+        df_meas.loc[self._pix] = V_vdd_comp.flatten().astype(pixel_dtype)
         
         return df_meas
     
@@ -576,11 +578,17 @@ class TPArray():
         
         return df_meas
     
-    def rawmeas_comp(self,df_meas:pd.DataFrame):
+    def rawmeas_comp(self,df_meas:pd.DataFrame,**kwargs):
         """
         Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
         no conversion in dK
         """
+        
+        # Apply pixel constants for sensitivity compensation?
+        comp_sense = kwargs.pop('comp_sense',True)
+        
+        # Convert pixel values to signed interger 64bit
+        df_meas = df_meas.astype(np.int64)
         
         df_calib = []
         
@@ -592,10 +600,14 @@ class TPArray():
             df_frame = self._comp_thermal_offset(df_frame.copy())
             df_frame = self._comp_electrical_offset(df_frame)
             
+            # Vdd compensation for all sensors but 8x8
             if not (self.width,self.height) == (8,8) :
                 df_frame = self._comp_vdd(df_frame)
             
-            df_frame = self._comp_sens(df_frame)
+            # Compensate pixel constants only on demand
+            if comp_sense == True:
+                df_frame = self._comp_sens(df_frame)
+            
             df_frame = self._calc_Tamb0(df_frame)
         
             # Convert back to DataFrame
@@ -689,6 +701,17 @@ class TPArray():
         mask = np.where(r > r_lim, 0, 1)
         
         return mask
+    
+    def df_to_np(self,df,**kwargs):
+        
+        row_idx = kwargs.pop('idx',df.index[0])
+
+        # Reshape dataframe to numpy array, if dataframe has multiple rows,
+        # take the first one by default
+        img = df.loc[row_idx,self._pix]
+        img = img.values.reshape(self._npsize)
+        
+        return img
     
     def save(self):
         '''

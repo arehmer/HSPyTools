@@ -154,64 +154,64 @@ class hdf5_mgr():
         
         return BCC
     
-    def delete_group(self,address):
+    def delete_BCC(self,bcc_name):
         
-        # delete from file
-        with h5py.File(self._hdf5_path, 'a') as hdf5_file:
-            del hdf5_file[address]
+        # Complete name to full hdf5_address
+        bcc_address = '/BCC/' + bcc_name
         
-        # delete from index
-        df_index = self.load_index()
-        del_idx = df_index.loc[df_index['address']==address].index
-        df_index = df_index.drop(del_idx)
+        # load bds index
+        bds_index = self.load_index()
         
-        self._write_fields({'index':df_index})
+        # Delete the BCC in the hdf5 file and references to it in bds_index 
+        
+        with h5py.File(self._hdf5_path,'a') as hdf5_file:
+            try:
+                del hdf5_file[bcc_address]
+                bds_index.loc[bds_index['BCC'] == bcc_name,'BCC'] = None
+            except:
+                print(bcc_name + " couldn't be deleted or doesn't exist anymore")
+                bds_index.loc[bds_index['BCC'] == bcc_name,'BCC'] = None
+        
+        # write the new bds index to the file
+        self._write_fields({'index':bds_index})
         
         return None
     
     def _create_group_by_copy(self,source,target,groups,**kwargs):
+                
         
-        mode = kwargs.pop('mode','a')
-        
-        # Boolean that signals if data was written
-        success = False
-        
-        # Open file and check if group already exists
         with h5py.File(self._hdf5_path,  'a') as hdf5_file:
+                        
+            # copy specified groups in source to target
+            for group in groups:
+                hdf5_file.copy(source+'/'+group,target+'/'+group)
             
-            if target in hdf5_file:
-                target_exists = True
-                print('Target group already exists.\n')
-            else:
-                target_exists = False
-                
-        if target_exists==True and mode == 'w':
-            # Delete existing group if mode='w'
-            with h5py.File(self._hdf5_path,  'a') as hdf5_file:
-                
-                print('Target group is deleted and rewritten.\n')
-                self.delete_group(target)
-                
-                # copy specified groups in source to target
-                for group in groups:
-                    hdf5_file.copy(source+'/'+group,target+'/'+group)
-                    
-                success = True
-                
-        elif target_exists==False:
-            with h5py.File(self._hdf5_path,'a') as hdf5_file:
-                
-                # copy specified groups in source to target
-                for group in groups:
-                    hdf5_file.copy(source+'/'+group,target+'/'+group)
-                    
-                success = True
-                
-        elif target_exists==True and mode != 'w':
-            print('No data is written to group. Pass mode="w" \n to overwrite existing data.')
-                       
-        return success
+        return None
+
         
+    def _group_exists(self,hdf5_address:str)->bool:
+        """
+        Checks if a group already exists at the given address in the hdf5-file
+
+        Parameters
+        ----------
+        hdf5_address : str
+            DESCRIPTION.
+
+        Returns
+        -------
+        bool
+            DESCRIPTION.
+
+        """
+        
+        group_exists = False
+        
+        with h5py.File(self._hdf5_path,'a') as hdf5_file:
+            if hdf5_address in hdf5_file:
+                group_exists = True
+        
+        return group_exists
 
     def video_to_avi(self,unique_id,**kwargs):
         """

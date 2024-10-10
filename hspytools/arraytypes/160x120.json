@@ -23,12 +23,12 @@
 		"adr_stop":  "0x0D"},
 
 	"vddMeas_th1": {
-		"dtype": "int16",
+		"dtype": "uint16",
 		"adr_start": "0x26",
 		"adr_stop":  "0x27"},
 
 	"vddMeas_th2": {
-		"dtype": "int16",
+		"dtype": "uint16",
 		"adr_start": "0x28",
 		"adr_stop":  "0x29"},
 
