@@ -1,9 +1,7 @@
 pandas==2.2.2
-h5py
 numpy
 matplotlib
 scipy
 scikit-learn
-tables
 openpyxl
 mcap

@@ -245,8 +245,26 @@ class LuT:
         
         return None
         
-    def eval_LuT(self,data,Ta_col='Tamb0',Ud_col='Ud'):
+    def eval_LuT(self,data:pd.DataFrame,Ta_col='Tamb0',Ud_col='Ud'):
+        """
         
+
+        Parameters
+        ----------
+        data : pd.DataFrame. Contains ambient temperature in Ta_col in dK
+            and pixel voltage in digits in Ud_col
+            DESCRIPTION.
+        Ta_col : TYPE, optional
+            DESCRIPTION. The default is 'Tamb0'.
+        Ud_col : TYPE, optional
+            DESCRIPTION. The default is 'Ud'.
+
+        Returns
+        -------
+        data : TYPE
+            DESCRIPTION.
+
+        """
         LuT = self.LuT
         
         # Convert measurements in Kelvin to dK
@@ -261,7 +279,7 @@ class LuT:
             col_idx = LuT.columns < Ta_meas
             
             # Check if Ta_meas is outside of the range of the LuT
-            if not all(col_idx==False):
+            if not all(col_idx==True):
                 LuT_col = LuT.columns[col_idx][-1]
                 Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
             else:

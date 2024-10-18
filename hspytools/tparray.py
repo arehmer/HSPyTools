@@ -611,8 +611,8 @@ class TPArray():
         for block in range(self._DevConst['NROFBLOCKS']):
             
             # Extract the content of the block from the lower and upper half
-            top_rows = frame_upper_half[block*rows:(block+1)*rows]
-            bottom_rows = frame[block*rows:(block+1)*rows]
+            top_rows = frame_upper_half[block*rows:(block+1)*rows,::]
+            bottom_rows = frame[block*rows:(block+1)*rows,::]
         
             # Write block of upper and lower half to dict
             block_dict[block] = (top_rows,bottom_rows)
