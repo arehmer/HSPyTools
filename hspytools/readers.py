@@ -280,7 +280,7 @@ class HTPAdGUI_FileReader():
             
         return None    
     
-    def export_png(self,df_video,path):
+    def export_png(self,df_video,path,**kwargs):
         """
         A function for writing a video sequence given as a DataFrame to .png
         frame by frame in a sepcified folder (path)
@@ -306,8 +306,9 @@ class HTPAdGUI_FileReader():
         # Get rid of everything else
         df_video = df_video[pix_cols]
         
-       
-       
+        # Limits for linear scaling
+        vmin = kwargs.pop('vmin',None)
+        vmax = kwargs.pop('vmax',None)
        
         if not path.exists():
             path.mkdir(parents=True,exist_ok=False)
@@ -318,9 +319,22 @@ class HTPAdGUI_FileReader():
             
             file_name = str(i) + '.png'
             
-            img = self._scale_img(img)
-
-            matplotlib.image.imsave(path / file_name, img)
+            # If no limits for scaling are provided, vmin is the 2nd percentile
+            # and vmax the 98th percentile
+            
+            if vmin is None:
+                vmin_i = np.percentile(img, 2)
+            else:
+                vmin_i = vmin
+            
+            if vmax is None:
+                vmax_i = np.percentile(img, 98)
+            else:
+                vmax_i = vmax
+            
+            matplotlib.image.imsave(path / file_name, img,
+                                    vmin = vmin_i,
+                                    vmax = vmax_i)
         
         return None
 

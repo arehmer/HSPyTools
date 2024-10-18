@@ -5,12 +5,10 @@ Created on Wed Jun 21 11:16:48 2023
 @author: Rehmer
 """
 import numpy as np
-import ctypes
 import pandas as pd
 import json
 from pathlib import Path
 import struct
-import matplotlib.pyplot as plt
 
 class TPArray():
     """
@@ -408,9 +406,6 @@ class TPArray():
             conv_val = None
         
         return conv_val
-            
-        
-        
 
     def _comp_thermal_offset(self,df_meas:pd.Series):
         
@@ -578,6 +573,54 @@ class TPArray():
         
         return df_meas
     
+    def frame_to_blocks(self,frame:np.ndarray,**kwargs)->dict:
+        """
+        Divides the frame into its blocks. Content of the frame is rearranged 
+        into a dictionary where each entry corresponds to a block.
+        Parameters
+        ----------
+        frame : np.ndarray
+            Frame to be divided into its blocks.
+        **kwargs : dict
+            Optional keyword arguments.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the content of each block. in the following 
+            manner:
+              block_dict[0] = (rows_upper_half_block0, rows_lower_half_block0),
+              ...
+              block_dict[N] = (rows_upper_half_block0, rows_lower_half_blockN)
+
+        """
+        
+        # Calculate the number of rows
+        rows = self._rowsPerBlock
+        
+        # Dictionary for storing blocks in
+        block_dict = {}
+        
+        # Divide the frame into an upper and a lower half. Flip the lower half.
+        frame_upper_half = frame[0:int(self.height/2)]
+        frame_lower_half = frame[int(self.height/2)::]
+        
+        frame_lower_half = np.flipud(frame_lower_half)
+        
+        # Loop through the upper and lower half simultaneously
+        for block in range(self._DevConst['NROFBLOCKS']):
+            
+            # Extract the content of the block from the lower and upper half
+            top_rows = frame_upper_half[block*rows:(block+1)*rows]
+            bottom_rows = frame[block*rows:(block+1)*rows]
+        
+            # Write block of upper and lower half to dict
+            block_dict[block] = (top_rows,bottom_rows)
+
+
+        return block_dict
+    
+    
     def rawmeas_comp(self,df_meas:pd.DataFrame,**kwargs):
         """
         Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
@@ -618,7 +661,6 @@ class TPArray():
         
         return df_calib
     
-    
     def rawmeas_to_dK(self,df_meas):
         """
         Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
@@ -632,36 +674,7 @@ class TPArray():
         # Load LuT
         LuT = self.LuT.copy()
                 
-        Warning('''rawmeas_to_dK returns compensated voltage, not dK! Remaining operations need to be implemented for dataframe format!''')
-        
-        # #############  step 5: multiply sensitivity coeff for each pixel #############
-        # compPix[i][j] *= self._PCSCALEVAL / pixcScaled[i][j]
-  
-        # #############  step 6: find correct temp in lookup table and do a bilinear interpolation #############
-        # for k in range(self._LuT['digits'].shape[0]):
-        #     if(compPix[i][j] > (self._LuT['digits'][k])):
-        #         to_row[i][j] = k
-  
-        # # calc ratios of neighboring entries within look-up-table
-        # dto[0][i][j] = (self._LuT['digits'][to_row[i][j].astype(int) + 1] - compPix[i][j]) / (self._LuT['digits'][1] - self._LuT['digits'][0])
-        # dto[1][i][j] = (compPix[i][j] - self._LuT['digits'][to_row[i][j].astype(int)]) / (self._LuT['digits'][1] - self._LuT['digits'][0])
-  
-        # # find all four surrounding entries within look-up-table
-        # qto[0][i][j] = self._LuT['to'][to_row[i][j].astype(int)][ta_col]
-        # qto[1][i][j] = self._LuT['to'][to_row[i][j].astype(int) + 1][ta_col]
-        # qto[2][i][j] = self._LuT['to'][to_row[i][j].astype(int)][ta_col + 1]
-        # qto[3][i][j] = self._LuT['to'][to_row[i][j].astype(int) + 1][ta_col + 1]
-  
-        # # interpolate along ambient temperature
-        # rto[0][i][j] = dta[0] * qto[0][i][j] + dta[1] * qto[2][i][j]
-        # rto[1][i][j] = dta[0] * qto[1][i][j] + dta[1] * qto[3][i][j]
-  
-        # # interpolate along measured digits
-        # compPix[i][j] = rto[0][i][j] * dto[0][i][j] + rto[1][i][j] * dto[1][i][j]
-  
-        # #############  step 7: add GlobalOffset #############
-        # compPix[i][j] += self._bcc['globalOff']
-
+        raise Warning('''rawmeas_to_dK returns compensated voltage, not dK! Remaining operations need to be implemented for dataframe format!''')
         
         return df_meas
     

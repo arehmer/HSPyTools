@@ -327,7 +327,9 @@ class hdf5_mgr():
             
             # Pass the DataFrame to the method for writing to .png
             path = Path.cwd() /  (a+'/png')
-            reader.export_png(df_video,path)
+            reader.export_png(df_video,
+                              path,
+                              **kwargs)
             
         return path
     
