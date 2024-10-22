@@ -37,6 +37,8 @@ class TPArray():
             self._package_size = 262
             self._fs = 160
             self._NETD = 100
+            self.Pitch = 90.0e-6
+            self.Ampl = 40
             
             print('8x8.json has not yet been tested!')
             # path to array data
@@ -53,6 +55,8 @@ class TPArray():
             self._package_size = 780
             self._fs = 70
             self._NETD = 130
+            self.Pitch = 90.0e-6    #equal for r3
+            self.Ampl = 40          #equal for r3  
             
             print('16x16.json has not yet been tested!')
             # path to array data
@@ -69,6 +73,8 @@ class TPArray():
             self._package_size = 1292
             self._fs = 27
             self._NETD = 140
+            self.Pitch = 90.0e-6
+            self.Ampl = 40            
             
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '32x32.json'
@@ -100,6 +106,8 @@ class TPArray():
             self._package_size = 1283
             self._fs = 41
             self._NETD = 70
+            self.Pitch = 60.0e-6
+            self.Ampl = 60               
            
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '60x84.json'
@@ -115,6 +123,8 @@ class TPArray():
             self._package_size = 1401
             self._fs = 20
             self._NETD = 130
+            self.Pitch = 60.0e-6
+            self.Ampl = 60               
             r_lim = 60
             
             self._mask = self._binary_mask(r_lim) 
@@ -133,6 +143,8 @@ class TPArray():
             self._package_size = 1159
             self._fs = 47
             self._NETD = 90
+            self.Pitch = 45.0e-6
+            self.Ampl = 60               
             
             self._mask = np.ones(self._npsize)
             
@@ -150,6 +162,8 @@ class TPArray():
             self._package_size = 1401
             self._fs = 25
             self._NETD = 110
+            self.Pitch = 45.0e-6        #equal for r1
+            self.Ampl = 60              #40 for r1         
             
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '160x120.json'
