@@ -80,7 +80,7 @@ class UDP(WThread):
         self._exit = True
         
         # Stop the stream
-        self.udp_reader.stop_continuous_bytestream(self.dev_id)
+        self.udp_reader.stop_continuous_bytestream(DevID = self.dev_id)
         
         # Release the array
         self.udp_reader.release_tparray(self.dev_id)
@@ -97,7 +97,7 @@ class Imshow(RThread):
                  read_buffer:Queue,
                  **kwargs):
         
-        self.tparray = TPArray(width, height)
+        self.tparray = TPArray(width = width, height = height)
         self.num_pix = len(self.tparray._pix)
         
         self.window_name = kwargs.pop('window_name','Sensor stream')
@@ -154,9 +154,7 @@ class Imshow(RThread):
             
             cv2.imshow(self.window_name,frame)
             cv2.waitKey(1)
-            
-            
-                        
+
         # The opencv window needs to be closed inside the run function,
         # otherwise a window with the same name can never be opened until
         # the console is restarted
@@ -164,7 +162,6 @@ class Imshow(RThread):
             cv2.destroyWindow(self.window_name)
             
         def stop(self):
-
             self._exit = True
 
 

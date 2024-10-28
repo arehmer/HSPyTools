@@ -427,7 +427,8 @@ class HTPA_ByteStream_Converter():
         self.width = width
         self.height = height
         
-        self.tparray = TPArray(width,height)
+        self.tparray = TPArray(width = width,
+                               height = height)
         
         # Initialize an array to which to write data
         self.data_cols = self.tparray.get_serial_data_order()
@@ -512,7 +513,8 @@ class HTPA_UDPReader():
         
         # Initialize a TPArray object, which contains all information regarding
         # how data is stored, organized and transmitted for this array type
-        self._tparray = TPArray(width,height)
+        self._tparray = TPArray(width = width,
+                                height = height)
         
         # Create a DataFrame to store all bound devices in
         self.col_dict = {'IP':str,'MAC-ID':str,'Arraytype':int,
@@ -645,20 +647,12 @@ class HTPA_UDPReader():
 
         # Stop any stream that might still continue, e.g. if program 
         # crashed 
-        
-        # Send message to device to stop streaming bytes
-        for i in range(5):
-            udp_socket.sendto(bytes('X','utf-8'),server_address)
-            time.sleep(10/1000)
-        
-        # Clear the port in case old packages are still on it
-        _ = self._read_port(udp_socket,server_address)
+        old_packages = self.stop_continuous_bytestream(IP = ip)
         
         # Try to call device
         _ = udp_socket.sendto(bytes('Calling HTPA series devices',
                                     'utf-8'),
-                                   server_address)
-
+                                    server_address)
 
         # The package following the call should contain device information
         call = self._read_port(udp_socket,server_address)
@@ -677,7 +671,7 @@ class HTPA_UDPReader():
             call_fail = True
             
         if call_fail == True:
-            Exception('Calling HTPA series device failed')
+            raise Exception('Calling HTPA series device failed')
             return None
         
         # Next try to bind the device that answered the call        
@@ -689,7 +683,7 @@ class HTPA_UDPReader():
             # Read the answer to the bind command from socket
             _ = self._read_port(udp_socket,server_address)
         except:
-            Exception('Calling HTPA series device failed')
+            raise Exception('Calling HTPA series device failed')
             return None
         
         dev_info['status'] = 'bound'
@@ -757,28 +751,51 @@ class HTPA_UDPReader():
         # Send message to device to start streaming bytes
         _ = udp_socket.sendto(bytes('K','utf-8'),server_address)
 
-    def stop_continuous_bytestream(self,dev_id):
+    def stop_continuous_bytestream(self,**kwargs):
         
-        # Get device information from the device list
-        dev_info = self.devices.loc[[dev_id]]
+        dev_id = kwargs.pop('DevID',None)
+        ip = kwargs.pop('IP',None)
         
-        # If more than one devices have the same device id, return error
-        if len(dev_info) != 1:
-            Exception('Multiple devices have the same device id.')
+        if (dev_id is None) and (ip is None):
+            raise Exception('Either DevID or IP must be provided!')
         
-        # Get udp socket
-        udp_socket = self.sockets[dev_id]
-                
-        # Create server address
-        server_address = (dev_info['IP'].item(), self.port)
+        # Create an UDP socket and a server address
+        # If DevID is provided 
+        if dev_id is not None:
+            # Get device information from the device list
+            dev_info = self.devices.loc[[dev_id]]
+            
+            # If more than one devices have the same device id, return error
+            if len(dev_info) != 1:
+                Exception('Multiple devices have the same device id.')
+            
+            # Get udp socket
+            udp_socket = self.sockets[dev_id]
+                    
+            # Create server address
+            server_address = (dev_info['IP'].item(), self.port)
+        
+        # If IP is provided 
+        elif ip is not None:
+            # Create the udp socket
+            udp_socket = socket.socket(socket.AF_INET,          # Internet
+                                       socket.SOCK_DGRAM)       # UDP
+            
+            # Create server address
+            server_address = (ip,self._port)
+            
+            # Set timeout to 1 second
+            # socket.setdefaulttimeout(1)
+            udp_socket.settimeout(1)
                 
         # Send message to device to stop streaming bytes
         for i in range(5):
             udp_socket.sendto(bytes('X','utf-8'),server_address)
             time.sleep(10/1000)
-
+            udp_socket.sendto(bytes('x','utf-8'),server_address)
+            time.sleep(10/1000)
         
-        # Clean up port
+        # Clean up port by reading all old packages from it
         answ = self._read_port(udp_socket,server_address)
         
         return answ
@@ -872,6 +889,7 @@ class HTPA_UDPReader():
 
 
         return frame
+    
         
     # def read_single_frame(self,dev_id,**kwargs):
         
