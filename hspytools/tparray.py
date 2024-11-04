@@ -652,10 +652,13 @@ class TPArray():
         for i in df_meas.index:
             
             df_frame = df_meas.loc[i]
-            
+            frame_orig = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
             
             df_frame = self._comp_thermal_offset(df_frame.copy())
+            frame_thoff = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
+            
             df_frame = self._comp_electrical_offset(df_frame)
+            frame_eoff = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
             
             # Vdd compensation for all sensors but 8x8
             if not (self.width,self.height) == (8,8) :
@@ -664,6 +667,7 @@ class TPArray():
             # Compensate pixel constants only on demand
             if comp_sense == True:
                 df_frame = self._comp_sens(df_frame)
+                frame_pixc = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
             
             df_frame = self._calc_Tamb0(df_frame)
         
