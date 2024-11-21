@@ -9,21 +9,29 @@ import cv2
 from queue import Queue
 import numpy as np
 import pandas as pd
+from pathlib import Path
+from datetime import datetime
+import pickle as pkl
 
-from hspytools.ipc.threads_base import WThread,RThread
+from hspytools.ipc.threads_base import WThread,RThread, RWThread
 from hspytools.readers import HTPA_UDPReader
 from hspytools.tparray import TPArray
+
+from collections import deque
 
 
 
 class UDP(WThread):
     """
-    Class for running HTPA_UDP_Reader in a thread.
+    Class for running HTPA_UDP_Reader in a thread. Can only bind on device
+    at this point
     """
     
     def __init__(self,udp_reader:HTPA_UDPReader,
-                 dev_ip:str,
                  write_buffer:Queue,
+                 IP:str = '',
+                 DevID:int = -1,
+                 Bcast_Addr:str = '',
                  **kwargs):
         """
         
@@ -32,7 +40,7 @@ class UDP(WThread):
         ----------
         udp_reader : HTPA_UDP_Reader
             DESCRIPTION.
-        dev_ip : str
+        IP : str
             DESCRIPTION.
         start_trigger : Event
             DESCRIPTION.
@@ -50,14 +58,30 @@ class UDP(WThread):
         # Set UDP Reader object as attribute
         self.udp_reader = udp_reader
         
-        # Use object to bind htpa device available under dev_ip
-        bound_devices = self.udp_reader.bind_tparray(dev_ip)
-        self.dev_id = bound_devices[bound_devices['IP']==dev_ip].index.item()
-        
+        # Depending on whether the devices IP or the Device ID along with the 
+        # broadcast address are provided, the process of finding and 
+        # binding the corresponding htpa device differs
+        if (DevID!=-1) and (len(Bcast_Addr)!=0):
+            self.udp_reader.broadcast(Bcast_Addr)
+            self.udp_reader.bind(DevID = DevID)
+            
+            # Save DevID of bound device to attribute
+            self.DevID = DevID
+        elif len(IP)!=0:
+            self.udp_reader.bind(IP = IP)
+            
+            # Save DevID of bound device to attribute
+            devices = self.udp_reader.devices
+            self.DevID = devices[devices['IP']==IP].index.item()
+        else:
+            print('Either IP or DevID and Bcast_Addr of the device to be ' +\
+                  'bound have to be specified!')
         
         # Start continuous bytestream 
-        self.udp_reader.start_continuous_bytestream(self.dev_id)
-               
+        self.udp_reader.start_continuous_bytestream(self.DevID)
+        
+        # Set image_id counter
+        self.image_id = 0
         
         # Set time
         self.t0 = time.time()
@@ -70,9 +94,30 @@ class UDP(WThread):
         
         # print('Executed upd thread: ' + str(time.time()-self.t0) )
         
-        frame = self.udp_reader.read_continuous_bytestream(self.dev_id)
+        # Dictionary for storing results in
+        result = {}
         
-        return {'frame':frame}
+        try:
+            # Try to assemble a frame from the udp packages
+            frame = self.udp_reader.read_continuous_bytestream(self.DevID)
+            
+            # Set success flag and store frame
+            result['success'] = True
+            result['frame'] = frame    
+        except:
+            # Set success flag to False in case of failure
+            result['success'] = False
+        
+        # Store image_id
+        result['image_id'] = self.image_id
+        
+        # Store device ID
+        result['DevID'] = self.DevID
+        
+        # Increment image_id
+        self.image_id = self.image_id + 1
+               
+        return result
         
     def stop(self):
         
@@ -80,15 +125,15 @@ class UDP(WThread):
         self._exit = True
         
         # Stop the stream
-        self.udp_reader.stop_continuous_bytestream(DevID = self.dev_id)
+        self.udp_reader.stop_continuous_bytestream(DevID = self.DevID)
         
         # Release the array
-        self.udp_reader.release_tparray(self.dev_id)
+        self.udp_reader.release_tparray(self.DevID)
         
         
 class Imshow(RThread):
     """
-    Class for running HTPA_UDP_Reader in a thread.
+    Class for plotting frames and possibly bounding boxes in a thread.
     """
     
     def __init__(self,
@@ -110,27 +155,30 @@ class Imshow(RThread):
     def _target_function(self):
                 
         # Get result from upstream thread
-        upstream_dict = self.read_buffer.get()
-        frame = upstream_dict['frame']
+        result = self.read_buffer.get()
+        
+        # Check success flag of upstream thread
+        if result['success'] is True:
 
-        # Reshape if not the proper size
-        if frame.ndim == 1:
-            frame = frame[0:self.num_pix]
-            frame = frame.reshape(self.tparray._npsize)
-             
-        # convert to opencv type
-        frame = cv2.normalize(frame,frame,0,255,cv2.NORM_MINMAX)
-        frame = frame.astype(np.uint8)
+            frame = result['frame_proc']
+    
+            # Reshape if not the proper size
+            if frame.ndim == 1:
+                frame = frame[0:self.num_pix]
+                frame = frame.reshape(self.tparray._npsize)
+                 
+            # convert to opencv type
+            frame = cv2.normalize(frame,frame,0,255,cv2.NORM_MINMAX)
+            frame = frame.astype(np.uint8)
+            
+            # Save to dict
+            result['frame_plot'] = frame 
         
-        # Get bounding boxes
-        try:
-            bboxes = upstream_dict['bboxes']
-        except:
-            bboxes = pd.DataFrame(data=[])
+        else:
+            # If upstream thread failed, set success flag to False
+            result['success'] = False
         
-        # print('Executed plot thread \n')
-        
-        return frame,bboxes
+        return result
     
     def run(self):
         
@@ -139,21 +187,37 @@ class Imshow(RThread):
         while self._exit == False:
             
             # Execute target function
-            frame,bboxes = self._target()
+            result = self._target()
             
-            # Add a rectangle for every box
-            for b in bboxes.index:
+            # Check success flag of upstream thread
+            if result['success'] is True:
                 
-                box = bboxes.loc[[b]]
+                # Get frame (processed)
+                frame = result['frame_plot']
+                
+                # Get bboxes if available
+                if 'bboxes' in result.keys():
+                    bboxes = result['bboxes']
+                
+                    # Draw bounding boxes
+                    for b in bboxes.index:
+                        
+                        box = bboxes.loc[[b]]
+                    
+                        x,y = box['xtl'].item(),box['ytl'].item(),
+                        w = box['xbr'].item() - box['xtl'].item()
+                        h = box['ybr'].item() - box['ytl'].item()
+        
+                        frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
+                
+                cv2.imshow(self.window_name,frame)
+                cv2.waitKey(1)
             
-                x,y = box['xtl'].item(),box['ytl'].item(),
-                w = box['xbr'].item() - box['xtl'].item()
-                h = box['ybr'].item() - box['ytl'].item()
+            else:
+                pass
 
-                frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
-            
-            cv2.imshow(self.window_name,frame)
-            cv2.waitKey(1)
+            # Signal that processing on this item in the read_buffer is done
+            self.read_buffer.task_done()
 
         # The opencv window needs to be closed inside the run function,
         # otherwise a window with the same name can never be opened until
@@ -165,3 +229,352 @@ class Imshow(RThread):
             self._exit = True
 
 
+class Record_Thread(RWThread):
+    """
+    Class for writing a stream of frames along with possible bounding
+    boxes in a thread.
+    """
+    
+    def __init__(self,
+                 width:int,
+                 height:int,
+                 read_buffer:Queue,
+                 write_buffer:Queue,
+                 n_pre_record:int,
+                 imshow:bool,
+                 **kwargs):
+        
+        self.tparray = TPArray(width = width, height = height)                  # Array type
+        
+        self.n_pre_record = n_pre_record                                        # Number of pre-record items
+        self.pre_record_buffer = deque(maxlen=n_pre_record)                     # Buffer for pre-record data
+        
+        self.imshow = imshow                                                    # Show the sensor stream
+        self.window_name = kwargs.pop('window_name','Sensor stream')            # Name of the window the stream is shown in
+        
+        self.recording = False                                                  # Flag to check if recording is active
+        self.recorded_data = []                                                 # Store recorded data
+        self.recorded_sets = []
+        
+        # Call parent class
+        super().__init__(target = self._target_function,
+                         read_buffer = read_buffer,
+                         write_buffer = write_buffer,
+                         **kwargs)
+    
+    def _target_function(self):
+        """
+        Gets result from upstream thread. Optionally converts the frame to a
+        plotable format.
+
+        Returns
+        -------
+        result : TYPE
+            DESCRIPTION.
+
+        """
+        
+        # Get result from upstream thread
+        result = self.read_buffer.get()
+        
+        # Check success flag of upstream thread
+        if result['success'] is True:
+            
+            if self.imshow == True:
+                
+                frame = result['frame_proc'].copy()
+        
+                # Reshape if not the proper size
+                if frame.ndim == 1:
+                    frame = frame[0:self.num_pix]
+                    frame = frame.reshape(self.tparray._npsize)
+                     
+                # convert to opencv type
+                frame = cv2.normalize(frame,frame,0,255,cv2.NORM_MINMAX)
+                frame = frame.astype(np.uint8)
+                
+                # Save to dict
+                result['frame_plot'] = frame 
+        
+        else:
+            # If upstream thread failed, set success flag to False
+            result['success'] = False
+        
+        return result
+    
+    def _start_condition(self,data:dict):
+        '''
+        Checks if tracks or bounding boxes containing persons exist
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing data from upstream threads. It needs to 
+            contain a key 'bboxes' with a DataFrame containing bounding
+            boxes as value.
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        # Set start flag to False as default
+        start = False
+        
+        # Check if tracks with detected persons exist
+        if 'bboxes' in data.keys():
+            if len(data['bboxes'])!=0:
+                start = True
+        
+        return start
+    
+    def _stop_condition(self,data:dict):
+        """
+        
+        Checks if tracks or bounding boxes containing persons exist
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing data from upstream threads. It needs to 
+            contain a key 'bboxes' with a DataFrame containing bounding
+            boxes as value.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Set start flag to False as default
+        stop = False
+        
+        # Check if tracks with detected persons exist
+        if 'bboxes' in data.keys():
+            if len(data['bboxes'])==0:
+                stop = True
+        
+        return stop
+        
+    def run(self):
+        """
+        Function that it executed in the thread.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Open a cv namedWindow if specified
+        if self.imshow == True:
+            cv2.namedWindow(self.window_name,
+                            cv2.WINDOW_NORMAL)
+        
+        while self._exit == False:
+            
+            # Execute target function to get data from upstream thread
+            data = self._target()
+            
+            ############ Ploting part  ########################################
+            if (data['success'] == True) and (self.imshow == True):
+                
+                # Get frame (processed)
+                frame = data['frame_plot']
+                
+                # Get bboxes if available
+                if 'bboxes' in data.keys():
+                    bboxes = data['bboxes']
+                
+                    # Draw bounding boxes
+                    for b in bboxes.index:
+                        
+                        box = bboxes.loc[[b]]
+                    
+                        x,y = box['xtl'].item(),box['ytl'].item(),
+                        w = box['xbr'].item() - box['xtl'].item()
+                        h = box['ybr'].item() - box['ytl'].item()
+        
+                        frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
+                
+                cv2.imshow(self.window_name,frame)
+                cv2.waitKey(1)
+            
+        
+            ############ Recording part  ########################################
+            # Check if we're currently recording
+            if not self.recording:
+                
+                # Before recording, keep buffering the incoming data
+                self.pre_record_buffer.append(data)
+
+                # Check the start condition
+                if self._start_condition(data):
+                    
+                    # Start recording and include pre-recorded data
+                    self.recording = True
+                    self.recorded_data.extend(self.pre_record_buffer)
+                    
+                    # Clear the pre-recorded buffer
+                    self.pre_record_buffer.clear()  
+                    
+                    print("Recording started at frame " + str(data['image_id']) + \
+                          ". Pre-recorded data included.")
+                    
+            else:
+                # During recording, add new data to recorded_data
+                self.recorded_data.append(data)
+
+                # Check if the stop condition is met
+                if self._stop_condition(data):
+                    print("Recording stopped.")
+                    self.recording = False
+                    
+                    # Put the whole recorded data in the write buffer
+                    self.write_buffer.put(self.recorded_data)
+                    
+                    # Reset recorded data for next recording
+                    self.recorded_data = []
+
+            # Signal that processing on this item in the read_buffer is done
+            self.read_buffer.task_done()
+            
+        # If thread was stopped during recording, put the current data in the
+        # write buffer and destroy the cv window if it exists
+        if self._exit == True:
+            
+            if self.recording == True:
+                self.write_buffer.put(self.recorded_data) 
+                self.recorded_data = []
+            
+            if self.imshow == True:
+                cv2.destroyWindow(self.window_name)
+                
+            
+        def stop(self):
+            self._exit = True
+            
+            
+class FileWriter_Thread(RThread):
+    """
+    Thread for writing data into a file.
+    """
+    def __init__(self,
+                 width:int,
+                 height:int,
+                 read_buffer:Queue,
+                 **kwargs:dict):
+
+        self.tparray = TPArray(width = width, height = height)                  # Array type
+
+        self.save_dir = kwargs.pop('save_dir',Path.cwd())
+        
+        # Call parent class
+        super().__init__(target = self._target_function,
+                         read_buffer = read_buffer,
+                         **kwargs)
+        
+        # For debugging, write data to this attribute instead of to file
+        self.debug_list = []
+        
+    def run(self):
+        
+        while self._exit == False:
+
+            # Get dictionary with data from upstream thread by calling target 
+            # function
+            data = self._target_function()
+            
+            # Data is a list of dictionaries, which need to be organized 
+            # properly in order to be stored as a file
+            organized_data = self._organize_data(data)
+            
+            try:
+                
+                # Create a folder with an expressive name
+                current_datetime = datetime.now()
+                formatted_datetime = current_datetime.strftime("%d_%m_%y_%H%M")
+                DevID = organized_data.pop('DevID')
+                folder = self.save_dir / (formatted_datetime + '_' + str(DevID))
+                
+                folder.mkdir(parents=True, exist_ok=True)
+                
+                # Save the remaining values in dict (DataFrames) to files
+                for key,df in organized_data.items():
+                    file = folder / (key + '.df')
+                    pkl.dump(df,open(file,'wb'))
+                
+                self.read_buffer.task_done()
+                
+            except self.read_buffer.empty:
+                continue
+            
+    def _organize_data(self,data:list):
+        """
+        organize dictionary such that content can be easily written to files
+
+        Parameters
+        ----------
+        data : dict
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+                
+        # Initialize dictionaries/lists for storing re-organized data in
+        frames = {}
+        bboxes = []
+        frames_proc = {}
+        
+        # Go through all dictionaries in the list and organize the data 
+        for frame_dict in data:
+            
+            frames[frame_dict['image_id']] = frame_dict['frame']
+            
+            if 'bboxes' in frame_dict.keys():
+                bboxes.append(frame_dict['bboxes'])
+
+
+            if 'frame_proc' in frame_dict.keys():
+                # Processed frame is a 2d array of pixel values
+                temp = frame_dict['frame_proc'].reshape((-1,))
+                
+                # Append PTAT, elOff, etc, ...
+                temp = np.hstack((temp,
+                                  frame_dict['frame'][len(self.tparray._pix)::] ))
+                # frames_proc_temp 
+                frames_proc[frame_dict['image_id']] = temp
+            
+        # Make pandas DataFrames out of all of the dictionaries/lists
+        df_frames = pd.DataFrame.from_dict(frames,
+                                           orient='index',
+                                           columns = self.tparray.get_serial_data_order())
+    
+        df_frames_proc = pd.DataFrame.from_dict(frames_proc,
+                                                orient='index',
+                                                columns = self.tparray.get_serial_data_order())
+        
+        df_bboxes = pd.concat(bboxes)
+        
+        
+        # Put them in dictionary and return
+        organized_data = {}
+        
+        organized_data['DevID'] = frame_dict['DevID']
+        organized_data['frames'] = df_frames
+        organized_data['frames_proc'] = df_frames_proc
+        organized_data['bboxes'] = df_bboxes        
+        
+        return organized_data 
+    
+    def _target_function(self):
+        
+        print('You need to overwrite this method in the child class.')
+        # Get result from upstream thread
+        upstream_dict = self.read_buffer.get()
+    
+        return upstream_dict

@@ -34,6 +34,9 @@ class RWThread(Thread):
             # Write result to buffer
             self.write_buffer.put(result)
             
+            # Signal that processing on this item in the read_buffer is done
+            self.read_buffer.task_done()
+            
     def _target_function(self):
         
         print('You need to overwrite this method in the child class.')
@@ -69,8 +72,10 @@ class WThread(Thread):
             self.write_buffer.put(result)
                        
     def _target_function(self):
+        # This is a basic target function, that only gets the data from a buffer
+        # an passes it on. If any further processing is required, this target
+        # function or the run method must be overwritten in a child class
         
-        print('You need to overwrite this method in the child class.')
         # Get result from upstream thread
         upstream_dict = self.read_buffer.get()
     
@@ -98,6 +103,9 @@ class RThread(Thread):
                         
             # Execute target function
             result = self._target()
+            
+            # Signal that processing on this item in the read_buffer is done
+            self.read_buffer.task_done()
                        
     def _target_function(self):
         

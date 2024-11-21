@@ -508,8 +508,9 @@ class HTPA_UDPReader():
         self.width = width
         self.height = height
                
-        # Port over which HTPA device connects, usually 30444
+        ###### Set UDP options ################################################
         self._port = kwargs.pop('port',30444)
+        self._call_message = bytes('Calling HTPA series devices','utf-8')
         
         # Initialize a TPArray object, which contains all information regarding
         # how data is stored, organized and transmitted for this array type
@@ -521,8 +522,8 @@ class HTPA_UDPReader():
                          'status':str}
         self.index = pd.Index(data=[],dtype=int,name='DevID')
         self._devices = pd.DataFrame(data=[],
-                                    columns = self.col_dict.keys(),
-                                    index = self.index)
+                                     columns = self.col_dict.keys(),
+                                     index = self.index)
         
         # Dictionary for storing all sockets in
         self._sockets = {}
@@ -558,8 +559,21 @@ class HTPA_UDPReader():
         return self._devices
     @devices.setter
     def devices(self,df):
+        
+        # Get current devices
         devices_old = self._devices
-        self._devices = pd.concat(devices_old,df)
+        
+        # Check if that device already exists 
+        if df.index[0] in devices_old.index:
+            # if it does, replace the existing row
+            devices_old.loc[df.index[0]] = df.loc[df.index[0]]
+        
+        # if it doesn't append the new device
+        else:
+            self._devices = pd.concat([devices_old,df])
+            
+        
+        
 
     @property
     def sockets(self):
@@ -568,11 +582,7 @@ class HTPA_UDPReader():
     def sockets(self,socket:dict):
         self._sockets.update(socket)
 
-    
-    def broadcast(self):
-        Warning('Not implemented yet.')
-        return None
-    
+   
     def _read_port(self,udp_socket,server_address):
         """
         Read all packages available at the specified port and return the last
@@ -618,6 +628,167 @@ class HTPA_UDPReader():
         return packages
             
     
+    def broadcast(self,BROADCAST_ADDRESS:str):
+        
+        RESPONSE_TIMEOUT = 5  # Wait time in seconds for devices to respond
+        
+        devices = []
+
+        # Set up a UDP socket for broadcast
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.settimeout(RESPONSE_TIMEOUT)
+            
+            # Send call message
+            # print("Calling HTPA devices...")
+            sock.sendto(self._call_message, (BROADCAST_ADDRESS, self._port))
+                        
+            # Listen for responses
+            start_time = time.time()
+            while time.time() - start_time < RESPONSE_TIMEOUT:
+                try:
+                    # Try receiving data from socket
+                    data, addr = sock.recvfrom(2048)                             # Buffer size of 2048 bytes
+                    # print(f"Received response from {addr}: {data}")
+                
+                    # Check if received data is callstring of an HTPA device
+                    if data.startswith(b'HTPA series responsed!'):
+                        # If so, try to extract device information from the
+                        # call string
+                        dev_info = self._callstring_to_information(data)
+                        
+                        # Set status to 'discovered'
+                        dev_info['status'] = 'discovered'
+                        
+                        # Get the device id
+                        DevID = dev_info.index[0]
+                        
+                        # if the device has already been found or bound,
+                        # don't update the device index
+                        if DevID in self.devices.index:
+                            pass
+                        else:
+                            # Else do update the index
+                            self.devices = dev_info
+                        
+                except socket.timeout:
+                    break  # Timeout reached, stop listening
+        
+        if len(self.devices)==0:
+            print('stop here')
+        
+        return devices
+    
+    def bind(self,IP:str='',DevID:int=-1):
+        """
+        Binds an HTPA device which is specified either via its IP or its DevID.
+        If a device is specified via its DevID, it must have been discovered
+        via broadcasting beforehand and therefore exist in the device index
+        self.devices
+
+        Parameters
+        ----------
+        **kwargs : dict
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+
+        if DevID!=-1:
+            self._bind_discovered_htpa(DevID)
+        elif len(IP)!=0:
+            self._bind_undiscovered_htpa(IP)
+        else:
+            print('Either IP or DevID of the device to be bound have to ' +\
+                  'be specified!')
+
+        
+    def _bind_discovered_htpa(self,DevID:int):
+        """
+        Binds an already discored htpa device which is specified via its
+        DevID.
+
+        Parameters
+        ----------
+        DevID : int
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Check if the specified device exists
+        if DevID not in self.devices.index:
+            raise Exception('Device ' + str(DevID) + ' seems to have not been ' +\
+                            'discovered yet. Try broadcasting first.')
+        
+        # Get a copy of the row corresponding to this device (as a pd.Series)
+        dev_info = self.devices.loc[[DevID]].copy()
+        
+        # Get the devices IP
+        IP = dev_info.loc[DevID,'IP']
+        
+        
+        # Create the udp socket
+        udp_socket = socket.socket(socket.AF_INET,          # Internet
+                                   socket.SOCK_DGRAM)       # UDP
+        
+        # Create server address
+        server_address = (IP,self._port)
+               
+        # Set timeout to 1 second
+        udp_socket.settimeout(1)
+        
+        # Stop any stream that might still continue, e.g. if program 
+        # crashed 
+        _ = self.stop_continuous_bytestream(IP = IP)
+        
+        # Next try to bind the device that answered the call        
+        try:
+            _ = udp_socket.sendto(bytes('Bind HTPA series device',
+                                        'utf-8'),
+                                  server_address)
+            
+            # Read the answer to the bind command from socket
+            answer = self._read_port(udp_socket,server_address)
+
+        except:
+            raise Exception('Calling HTPA series device failed')
+        
+        dev_info.loc[DevID,'status'] = 'bound'
+        
+        # Add socket to dictionary
+        self.sockets = {DevID:udp_socket}
+        
+        # Append new device to device list and store
+        self.devices = dev_info
+        
+        print('Bound HTPA device with DevID: ' + str(DevID) )
+
+    
+    
+    def _bind_undiscovered_htpa(self,IP:str):
+        """
+        Tries to call and bind an htpa device under the specified IP address.
+
+        Parameters
+        ----------
+        IP : str
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        self.bind_tparray(IP)
+    
     def bind_tparray(self,ip:str):
         """
         Creates a socket for the device with the given ip
@@ -640,7 +811,6 @@ class HTPA_UDPReader():
         server_address = (ip,self._port)
                
         # Set timeout to 1 second
-        # socket.setdefaulttimeout(1)
         udp_socket.settimeout(1)
         
         # Try calling the device and check if it's a HTPA device
@@ -699,17 +869,17 @@ class HTPA_UDPReader():
         
         return self.devices.copy()
 
-    def release_tparray(self,dev_id):
+    def release_tparray(self,DevID:int):
         
         # Get device information from the device list
-        dev_info = self.devices.loc[[dev_id]]
+        dev_info = self.devices.loc[[DevID]]
         
         # If more than one devices have the same device id, return error
         if len(dev_info) != 1:
             Exception('Multiple devices have the same device id.')
             
         # Get udp socket
-        udp_socket = self.sockets[dev_id]
+        udp_socket = self.sockets[DevID]
         
         # Create server address
         server_address = (dev_info['IP'].item(), self.port)
@@ -729,7 +899,7 @@ class HTPA_UDPReader():
         # Clean up port
         answ = self._read_port(udp_socket,server_address)
         
-        print('Released HTPA device with DevID: ' + str(dev_id) )
+        print('Released HTPA device with DevID: ' + str(DevID) )
             
         return answ    
             
