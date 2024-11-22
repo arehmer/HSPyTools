@@ -674,8 +674,9 @@ class HTPA_UDPReader():
                 except socket.timeout:
                     break  # Timeout reached, stop listening
         
-        if len(self.devices)==0:
-            print('stop here')
+        if len(self.devices)!=0:
+            print('Devices found:\n')
+            print(self.devices)
         
         return devices
     
