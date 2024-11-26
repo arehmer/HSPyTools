@@ -6,7 +6,10 @@ Created on Thu Feb  8 16:13:39 2024
 """
 import time
 import cv2
+
 from queue import Queue
+from threading import Condition
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -29,13 +32,12 @@ class UDP(WThread):
     
     def __init__(self,udp_reader:HTPA_UDPReader,
                  write_buffer:Queue,
+                 write_condition:Condition,
                  IP:str = '',
                  DevID:int = -1,
                  Bcast_Addr:str = '',
                  **kwargs):
         """
-        
-
         Parameters
         ----------
         udp_reader : HTPA_UDP_Reader
@@ -88,11 +90,12 @@ class UDP(WThread):
         
         super().__init__(target = self._target_function,
                          write_buffer = write_buffer,
+                         write_condition = write_condition,
                          **kwargs)
             
     def _target_function(self):
         
-        # print('Executed upd thread: ' + str(time.time()-self.t0) )
+        print('Executed upd thread: ' + str(time.time()-self.t0) )
         
         # Dictionary for storing results in
         result = {}
@@ -140,6 +143,7 @@ class Imshow(RThread):
                  width:int,
                  height:int,
                  read_buffer:Queue,
+                 read_condition:Condition,
                  **kwargs):
         
         self.tparray = TPArray(width = width, height = height)
@@ -147,13 +151,19 @@ class Imshow(RThread):
         
         self.window_name = kwargs.pop('window_name','Sensor stream')
         
+        # Set time
+        self.t0 = time.time()
+        
         # Call parent class
         super().__init__(target = self._target_function,
                          read_buffer = read_buffer,
+                         read_condition = read_condition,
                          **kwargs)
     
     def _target_function(self):
-                
+        
+        print('Executed imshow thread: ' + str(time.time()-self.t0) )
+        
         # Get result from upstream thread
         result = self.read_buffer.get()
         
@@ -184,49 +194,61 @@ class Imshow(RThread):
         
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
         
+        # Check if thread has been stopped
         while self._exit == False:
             
-            # Execute target function
-            result = self._target()
+            # Acquire the read condition
+            with self.read_condition:
             
-            # Check success flag of upstream thread
-            if result['success'] is True:
+                # Wait until the upstream thread notifies this thread
+                while self.read_buffer.empty():
+                    self.read_condition.wait()
+            
+                # Execute target function
+                result = self._target()
                 
-                # Get frame (processed)
-                frame = result['frame_plot']
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer and processed
+                self.read_condition.notify()
                 
-                # Get bboxes if available
-                if 'bboxes' in result.keys():
-                    bboxes = result['bboxes']
-                
-                    # Draw bounding boxes
-                    for b in bboxes.index:
-                        
-                        box = bboxes.loc[[b]]
+                # Check success flag of upstream thread
+                if result['success'] is True:
                     
-                        x,y = box['xtl'].item(),box['ytl'].item(),
-                        w = box['xbr'].item() - box['xtl'].item()
-                        h = box['ybr'].item() - box['ytl'].item()
-        
-                        frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
+                    # Get frame (processed)
+                    frame = result['frame_plot']
+                    
+                    # Get bboxes if available
+                    if 'bboxes' in result.keys():
+                        bboxes = result['bboxes']
+                    
+                        # Draw bounding boxes
+                        for b in bboxes.index:
+                            
+                            box = bboxes.loc[[b]]
+                        
+                            x,y = box['xtl'].item(),box['ytl'].item(),
+                            w = box['xbr'].item() - box['xtl'].item()
+                            h = box['ybr'].item() - box['ytl'].item()
+            
+                            frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
+                    
+                    cv2.imshow(self.window_name,frame)
+                    cv2.waitKey(1)
                 
-                cv2.imshow(self.window_name,frame)
-                cv2.waitKey(1)
-            
-            else:
-                pass
+                else:
+                    pass
+    
+                # Signal that processing on this item in the read_buffer is done
+                # self.read_buffer.task_done()
 
-            # Signal that processing on this item in the read_buffer is done
-            self.read_buffer.task_done()
-
-        # The opencv window needs to be closed inside the run function,
-        # otherwise a window with the same name can never be opened until
-        # the console is restarted
-        if self._exit == True:
-            cv2.destroyWindow(self.window_name)
+            # The opencv window needs to be closed inside the run function,
+            # otherwise a window with the same name can never be opened until
+            # the console is restarted
+            if self._exit == True:
+                cv2.destroyWindow(self.window_name)
             
-        def stop(self):
-            self._exit = True
+    def stop(self):
+        self._exit = True
 
 
 class Record_Thread(RWThread):
@@ -239,7 +261,9 @@ class Record_Thread(RWThread):
                  width:int,
                  height:int,
                  read_buffer:Queue,
+                 read_condition:Condition,
                  write_buffer:Queue,
+                 write_condition:Condition,
                  n_pre_record:int,
                  imshow:bool,
                  **kwargs):
@@ -256,10 +280,15 @@ class Record_Thread(RWThread):
         self.recorded_data = []                                                 # Store recorded data
         self.recorded_sets = []
         
+        # Set time
+        self.t0 = time.time() 
+        
         # Call parent class
         super().__init__(target = self._target_function,
                          read_buffer = read_buffer,
+                         read_condition = read_condition,
                          write_buffer = write_buffer,
+                         write_condition = write_condition,
                          **kwargs)
     
     def _target_function(self):
@@ -273,6 +302,9 @@ class Record_Thread(RWThread):
             DESCRIPTION.
 
         """
+        
+        print('Executed record thread: ' + str(time.time()-self.t0) )
+        
         
         # Get result from upstream thread
         result = self.read_buffer.get()
@@ -372,46 +404,64 @@ class Record_Thread(RWThread):
             cv2.namedWindow(self.window_name,
                             cv2.WINDOW_NORMAL)
         
+        # Check if thread has been stopped
         while self._exit == False:
             
-            # Execute target function to get data from upstream thread
-            data = self._target()
-            
-            ############ Ploting part  ########################################
-            if (data['success'] == True) and (self.imshow == True):
+            # Acquire the read condition
+            with self.read_condition:
+
+                # Wait until the upstream thread notifies this thread
+                while self.read_buffer.empty():
+
+                    self.read_condition.wait()    
+
+                # Execute target function to get data from upstream thread
+                data = self._target()
                 
-                # Get frame (processed)
-                frame = data['frame_plot']
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer
+                self.read_condition.notify()
                 
-                # Get bboxes if available
-                if 'bboxes' in data.keys():
-                    bboxes = data['bboxes']
                 
-                    # Draw bounding boxes
-                    for b in bboxes.index:
-                        
-                        box = bboxes.loc[[b]]
+                ############ Ploting part  ########################################
+                if (data['success'] == True) and (self.imshow == True):
                     
-                        x,y = box['xtl'].item(),box['ytl'].item(),
-                        w = box['xbr'].item() - box['xtl'].item()
-                        h = box['ybr'].item() - box['ytl'].item()
-        
-                        frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
-                
-                cv2.imshow(self.window_name,frame)
-                cv2.waitKey(1)
+                    # Get frame (processed)
+                    frame = data['frame_plot']
+                    
+                    # Get bboxes if available
+                    if 'bboxes' in data.keys():
+                        bboxes = data['bboxes']
+                    
+                        # Draw bounding boxes
+                        for b in bboxes.index:
+                            
+                            box = bboxes.loc[[b]]
+                        
+                            x,y = box['xtl'].item(),box['ytl'].item(),
+                            w = box['xbr'].item() - box['xtl'].item()
+                            h = box['ybr'].item() - box['ytl'].item()
+            
+                            frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
+                    
+                    cv2.imshow(self.window_name,frame)
+                    cv2.waitKey(1)
+                    
+                    # Notify the upstream thread, that the item has been retrieved
+                    # from the buffer
+                    self.read_condition.notify()
             
         
             ############ Recording part  ########################################
             # Check if we're currently recording
             if not self.recording:
-                
+
                 # Before recording, keep buffering the incoming data
                 self.pre_record_buffer.append(data)
 
                 # Check the start condition
                 if self._start_condition(data):
-                    
+
                     # Start recording and include pre-recorded data
                     self.recording = True
                     self.recorded_data.extend(self.pre_record_buffer)
@@ -421,8 +471,10 @@ class Record_Thread(RWThread):
                     
                     print("Recording started at frame " + str(data['image_id']) + \
                           ". Pre-recorded data included.")
+
                     
             else:
+
                 # During recording, add new data to recorded_data
                 self.recorded_data.append(data)
 
@@ -432,13 +484,22 @@ class Record_Thread(RWThread):
                     self.recording = False
                     
                     # Put the whole recorded data in the write buffer
-                    self.write_buffer.put(self.recorded_data)
+                    # Acquire the write condition
+                    with self.write_condition:
+                        
+                        # Write result to buffer
+                        self.write_buffer.put(self.recorded_data)
+                        
+                        # Notify the downstream thread, that item has been 
+                        # placed in the write buffer
+                        self.write_condition.notify()
                     
                     # Reset recorded data for next recording
                     self.recorded_data = []
 
             # Signal that processing on this item in the read_buffer is done
-            self.read_buffer.task_done()
+            # self.read_buffer.task_done()
+
             
         # If thread was stopped during recording, put the current data in the
         # write buffer and destroy the cv window if it exists
@@ -450,10 +511,11 @@ class Record_Thread(RWThread):
             
             if self.imshow == True:
                 cv2.destroyWindow(self.window_name)
+
                 
             
-        def stop(self):
-            self._exit = True
+    def stop(self):
+        self._exit = True
             
             
 class FileWriter_Thread(RThread):
@@ -464,15 +526,20 @@ class FileWriter_Thread(RThread):
                  width:int,
                  height:int,
                  read_buffer:Queue,
+                 read_condition:Condition,
                  **kwargs:dict):
 
         self.tparray = TPArray(width = width, height = height)                  # Array type
 
         self.save_dir = kwargs.pop('save_dir',Path.cwd())
         
+        # Set time
+        self.t0 = time.time()
+        
         # Call parent class
         super().__init__(target = self._target_function,
                          read_buffer = read_buffer,
+                         read_condition = read_condition,
                          **kwargs)
         
         # For debugging, write data to this attribute instead of to file
@@ -480,35 +547,50 @@ class FileWriter_Thread(RThread):
         
     def run(self):
         
+        # Check if thread has been stopped
         while self._exit == False:
+            
+            # Acquire the read condition
+            with self.read_condition:
+                
+                # Wait until the upstream thread notifies this thread
+                while self.read_buffer.empty():
+                    # print('here6')
+                    self.read_condition.wait()   
+                # print('here7')
+                    
+                
+                # Get dictionary with data from upstream thread by calling target 
+                # function
+                data = self._target_function()
 
-            # Get dictionary with data from upstream thread by calling target 
-            # function
-            data = self._target_function()
-            
-            # Data is a list of dictionaries, which need to be organized 
-            # properly in order to be stored as a file
-            organized_data = self._organize_data(data)
-            
-            try:
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer
+                self.read_condition.notify()
                 
-                # Create a folder with an expressive name
-                current_datetime = datetime.now()
-                formatted_datetime = current_datetime.strftime("%d_%m_%y_%H%M")
-                DevID = organized_data.pop('DevID')
-                folder = self.save_dir / (formatted_datetime + '_' + str(DevID))
+                # Data is a list of dictionaries, which need to be organized 
+                # properly in order to be stored as a file
+                organized_data = self._organize_data(data)
                 
-                folder.mkdir(parents=True, exist_ok=True)
-                
-                # Save the remaining values in dict (DataFrames) to files
-                for key,df in organized_data.items():
-                    file = folder / (key + '.df')
-                    pkl.dump(df,open(file,'wb'))
-                
-                self.read_buffer.task_done()
-                
-            except self.read_buffer.empty:
-                continue
+                try:
+                    
+                    # Create a folder with an expressive name
+                    current_datetime = datetime.now()
+                    formatted_datetime = current_datetime.strftime("%d_%m_%y_%H%M")
+                    DevID = organized_data.pop('DevID')
+                    folder = self.save_dir / (formatted_datetime + '_' + str(DevID))
+                    
+                    folder.mkdir(parents=True, exist_ok=True)
+                    
+                    # Save the remaining values in dict (DataFrames) to files
+                    for key,df in organized_data.items():
+                        file = folder / (key + '.df')
+                        pkl.dump(df,open(file,'wb'))
+                    
+                    # self.read_buffer.task_done()
+                    
+                except self.read_buffer.empty:
+                    continue
             
     def _organize_data(self,data:list):
         """
@@ -573,7 +655,8 @@ class FileWriter_Thread(RThread):
     
     def _target_function(self):
         
-        print('You need to overwrite this method in the child class.')
+        print('Executed writer thread: ' + str(time.time()-self.t0) )
+        
         # Get result from upstream thread
         upstream_dict = self.read_buffer.get()
     

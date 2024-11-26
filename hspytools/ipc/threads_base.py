@@ -6,7 +6,9 @@ Created on Thu Feb  8 16:12:35 2024
 """
 
 from threading import Thread
+from threading import Condition
 from queue import Queue
+
 
 
 class RWThread(Thread):
@@ -15,27 +17,58 @@ class RWThread(Thread):
     """
     def __init__(self,target,
                  read_buffer:Queue,
+                 read_condition:Condition,
                  write_buffer:Queue,
+                 write_condition:Condition,
                  **kwargs):
 
         self.read_buffer = read_buffer
+        self.read_condition = read_condition
+        
         self.write_buffer = write_buffer
+        self.write_condition = write_condition
+        
         self._exit = False               # Exit flag 
 
         super().__init__(target=target,**kwargs)
     
     def run(self):
         
+        # Check if thread has been stopped
         while self._exit == False:
             
-            # Execute target function
-            result = self._target()
+            # Acquire the read condition
+            with self.read_condition:
+                
+                # Wait until the upstream thread notifies this thread
+                while self.read_buffer.empty():
+                    self.read_condition.wait()  
+                
+                # Execute target function (get item from read_buffer and process it)
+                result = self._target()
+                
+                # Signal that processing on this item in the read_buffer is done
+                # self.read_buffer.task_done()
+                
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer
+                self.read_condition.notify()
             
-            # Write result to buffer
-            self.write_buffer.put(result)
+            # Acquire the write condition
+            with self.write_condition:
+                
+                # Write result to buffer
+                self.write_buffer.put(result)
+                
+                # Notify the downstream thread, that item has been placed in the
+                # write buffer
+                self.write_condition.notify()
+                
+                # Wait for the downstream thread to process
+                while not self.write_buffer.empty():
+                    self.write_condition.wait()
             
-            # Signal that processing on this item in the read_buffer is done
-            self.read_buffer.task_done()
+
             
     def _target_function(self):
         
@@ -54,32 +87,48 @@ class WThread(Thread):
     """
     Base class for a thread that writes into a buffer
     """
-    def __init__(self,target,write_buffer:Queue,**kwargs):
+    def __init__(self,
+                 target,
+                 write_buffer:Queue,
+                 write_condition:Condition,
+                 **kwargs):
         
         self.write_buffer = write_buffer
+        self.write_condition = write_condition
         self._exit = False 
         
         super().__init__(target=target,**kwargs)
         
     def run(self):
         
+        # Check if thread has been stopped
         while self._exit == False:
                         
             # Execute target function
             result = self._target()
             
-            # Write result to buffer
-            self.write_buffer.put(result)
+            # Acquire the write condition
+            with self.write_condition:
+            
+                # Write result to buffer
+                self.write_buffer.put(result)
+                
+                # Notify the downstream thread, that item has been placed in the
+                # write buffer
+                self.write_condition.notify()
+                
+                # Wait for the downstream thread to process
+                while not self.write_buffer.empty():
+                    self.write_condition.wait()
                        
     def _target_function(self):
-        # This is a basic target function, that only gets the data from a buffer
-        # an passes it on. If any further processing is required, this target
-        # function or the run method must be overwritten in a child class
+        # This is a basic target function that produces a fake processing
+        # result
         
         # Get result from upstream thread
-        upstream_dict = self.read_buffer.get()
-    
-        return upstream_dict
+        result_dict = {'fake':1}
+        
+        return result_dict
     
     
     def stop(self):
@@ -90,26 +139,43 @@ class RThread(Thread):
     """
     Base class for a thread that reads from a buffer
     """
-    def __init__(self,target,read_buffer:Queue,**kwargs):
+    def __init__(self,
+                 target,
+                 read_buffer:Queue,
+                 read_condition:Condition,
+                 **kwargs):
         
         self.read_buffer = read_buffer
+        self.read_condition = read_condition
         self._exit = False 
         
         super().__init__(target=target,**kwargs)
         
     def run(self):
         
+        # Check if thread has been stopped
         while self._exit == False:
                         
-            # Execute target function
-            result = self._target()
-            
-            # Signal that processing on this item in the read_buffer is done
-            self.read_buffer.task_done()
+            # Acquire the read condition
+            with self.read_condition:
+        
+                # Wait until the upstream thread notifies this thread
+                while self.read_buffer.empty():
+                    self.read_condition.wait()     
+        
+                # Execute target function
+                result = self._target()
+                
+                # Signal that processing on this item in the read_buffer is done
+                # self.read_buffer.task_done()
+                
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer
+                self.read_condition.notify()
+                
                        
     def _target_function(self):
-        
-        print('You need to overwrite this method in the child class.')
+
         # Get result from upstream thread
         upstream_dict = self.read_buffer.get()
     
