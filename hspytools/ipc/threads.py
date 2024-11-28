@@ -412,7 +412,6 @@ class Record_Thread(RWThread):
 
                 # Wait until the upstream thread notifies this thread
                 while self.read_buffer.empty():
-
                     self.read_condition.wait()    
 
                 # Execute target function to get data from upstream thread
