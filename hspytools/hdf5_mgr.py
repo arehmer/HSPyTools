@@ -110,8 +110,8 @@ class hdf5_mgr():
         
         df_index = pd.read_hdf(self._hdf5_path, address)
         
-        if len(self.filename_dtypes)!=0 and len(df_index.columns)!=0:
-            df_index = df_index.astype(self.filename_dtypes)
+        if len(self.types)!=0 and len(df_index.columns)!=0:
+            df_index = df_index.astype(self.types)
        
         return df_index
     
