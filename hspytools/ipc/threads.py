@@ -95,7 +95,7 @@ class UDP(WThread):
             
     def _target_function(self):
         
-        print('Executed upd thread: ' + str(time.time()-self.t0) )
+        # print('Executed upd thread: ' + str(time.time()-self.t0) )
         
         # Dictionary for storing results in
         result = {}
@@ -162,7 +162,7 @@ class Imshow(RThread):
     
     def _target_function(self):
         
-        print('Executed imshow thread: ' + str(time.time()-self.t0) )
+        # print('Executed imshow thread: ' + str(time.time()-self.t0) )
         
         # Get result from upstream thread
         result = self.read_buffer.get()
@@ -303,7 +303,7 @@ class Record_Thread(RWThread):
 
         """
         
-        print('Executed record thread: ' + str(time.time()-self.t0) )
+        # print('Executed record thread: ' + str(time.time()-self.t0) )
         
         
         # Get result from upstream thread
@@ -554,9 +554,7 @@ class FileWriter_Thread(RThread):
                 
                 # Wait until the upstream thread notifies this thread
                 while self.read_buffer.empty():
-                    # print('here6')
                     self.read_condition.wait()   
-                # print('here7')
                     
                 
                 # Get dictionary with data from upstream thread by calling target 
@@ -654,7 +652,7 @@ class FileWriter_Thread(RThread):
     
     def _target_function(self):
         
-        print('Executed writer thread: ' + str(time.time()-self.t0) )
+        # print('Executed writer thread: ' + str(time.time()-self.t0) )
         
         # Get result from upstream thread
         upstream_dict = self.read_buffer.get()
