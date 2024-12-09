@@ -217,6 +217,10 @@ class Imshow(RThread):
                     # Get frame (processed)
                     frame = result['frame_plot']
                     
+                    # Convert frame to RGB to be able to plot colored 
+                    # boxes
+                    frame = cv2.cvtColor(frame,cv2.COLOR_GRAY2RGB)
+                    
                     # Get bboxes if available
                     if 'bboxes' in result.keys():
                         bboxes = result['bboxes']
@@ -230,7 +234,7 @@ class Imshow(RThread):
                             w = box['xbr'].item() - box['xtl'].item()
                             h = box['ybr'].item() - box['ytl'].item()
             
-                            frame = cv2.rectangle(frame, (x,y), (x+w,y+h), 1 ,1)
+                            frame = cv2.rectangle(frame, (x,y), (x+w,y+h), (255,255,0),1)
                     
                     cv2.imshow(self.window_name,frame)
                     cv2.waitKey(1)
