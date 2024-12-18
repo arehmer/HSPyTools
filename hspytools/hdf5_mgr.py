@@ -74,14 +74,72 @@ class hdf5_mgr():
         
         if is_empty:
             self._initialize_index()
+            self._initialize_types()
+    
+    # @property
+    # def types(self):
+    #     return self._read_dict_from_hdf5('types')
+    
+    # @types.setter
+    # def types(self,types):
+    #     # Load current type dict from file
+    #     types_old = self._read_dict_from_hdf5('types')
+        
+    #     # Update old dict (in-place operation)
+    #     types_old.update(types)
+        
+    #     # Write new dict back do dictionary        
+    #     self._save_attributes_to_hdf5('types',types_old)
+    
             
+
+    def _write_dict_to_hdf5(self,target_group,dictionary):
+        """
+        Writes the contents of a dictionary to a group called 'types' in an HDF5 file.
+        
+        Args:
+            
+        """
+        
+        with h5py.File(self._hdf5_path, 'w') as hdf_file:
+            types_group = hdf_file.create_group(target_group)
+            for key, value in dictionary.items():
+                types_group.attrs[key] = value
+    
+    def _read_dict_from_hdf5(self,target_group):
+        """
+        Reads the contents of the 'types' group in an HDF5 file into a dictionary.
+        
+        Args:
+            filename (str): Name of the HDF5 file to read from.
+        
+        Returns:
+            dict: Dictionary with string keys and string values.
+        """
+        dictionary = {}
+        with h5py.File(self._hdf5_path, 'r') as hdf_file:
+            types_group = hdf_file[target_group]
+            for key, value in types_group.attrs.items():
+                dictionary[key] = value
+                
+        return dictionary
     
     
     def _initialize_index(self):
-    
-            df_index = pd.DataFrame(data = [])
-            df_index.to_hdf(self._hdf5_path, key = 'index')
-    
+
+        df_index = pd.DataFrame(data = [])
+        df_index.to_hdf(self._hdf5_path, key = 'index')
+
+    def _initialize_types(self):
+        """
+        Initializes an empty group in the hdf5 file
+
+        Returns
+        -------
+        None.
+
+        """
+        self._write_dict_to_hdf5('types',{})
     
     def _write_fields(self,field_dict):
         """
@@ -110,8 +168,8 @@ class hdf5_mgr():
         
         df_index = pd.read_hdf(self._hdf5_path, address)
         
-        if len(self.types)!=0 and len(df_index.columns)!=0:
-            df_index = df_index.astype(self.types)
+        if len(self.hdf5Index_dtypes)!=0 and len(df_index.columns)!=0:
+            df_index = df_index.astype(self.hdf5Index_dtypes)
        
         return df_index
     
