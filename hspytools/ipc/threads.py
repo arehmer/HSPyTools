@@ -4,6 +4,8 @@ Created on Thu Feb  8 16:13:39 2024
 
 @author: rehmer
 """
+import os
+
 import time
 import cv2
 
@@ -15,6 +17,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 import pickle as pkl
+import csv
 
 from hspytools.ipc.threads_base import WThread,RThread, RWThread
 from hspytools.readers import HTPA_UDPReader
@@ -284,6 +287,11 @@ class Record_Thread(RWThread):
         self.recorded_data = []                                                 # Store recorded data
         self.recorded_sets = []
         
+        self.save_dir = kwargs.pop('save_dir',Path.cwd())                       # Directory to write results and recorded data to
+        self.save_keys = ['bboxes','frame']                                     # Keys of values in the received data that are to be written to files
+        self.file_path = {}                                                     # Dictionary of file paths
+        self.file = None                                                        # File handle to write data to
+        
         # Set time
         self.t0 = time.time() 
         
@@ -425,8 +433,7 @@ class Record_Thread(RWThread):
                 # from the buffer
                 self.read_condition.notify()
                 
-                
-                ############ Ploting part  ########################################
+                ############ Plotting part  ###################################
                 if (data['success'] == True) and (self.imshow == True):
                     
                     # Get frame (processed)
@@ -455,7 +462,7 @@ class Record_Thread(RWThread):
                     self.read_condition.notify()
             
         
-            ############ Recording part  ########################################
+            ############ Recording part #######################################
             # Check if we're currently recording
             if not self.recording:
 
@@ -464,13 +471,19 @@ class Record_Thread(RWThread):
 
                 # Check the start condition
                 if self._start_condition(data):
-
-                    # Start recording and include pre-recorded data
-                    self.recording = True
-                    self.recorded_data.extend(self.pre_record_buffer)
+                    
+                    # Once the starting condition is met, initialize
+                    # a new folder and files in it to write to
+                    self._initialize_recording_directory()
+                    
+                    # Write the pre-buffered data to the created files
+                    self._write_data_to_files(self.pre_record_buffer)
                     
                     # Clear the pre-recorded buffer
                     self.pre_record_buffer.clear()  
+                    
+                    # Set recording flag
+                    self.recording = True
                     
                     print("Recording started at frame " + str(data['image_id']) + \
                           ". Pre-recorded data included.")
@@ -478,27 +491,31 @@ class Record_Thread(RWThread):
                     
             else:
 
-                # During recording, add new data to recorded_data
-                self.recorded_data.append(data)
+                # During recording, write new data to file immediately
+                self._write_data_to_files([data])
+                
+                # self.recorded_data.append(data)
 
                 # Check if the stop condition is met
                 if self._stop_condition(data):
+                    
+                    # If so, unset recording flag
                     print("Recording stopped.")
                     self.recording = False
                     
-                    # Put the whole recorded data in the write buffer
-                    # Acquire the write condition
-                    with self.write_condition:
+                    # # Put the whole recorded data in the write buffer
+                    # # Acquire the write condition
+                    # with self.write_condition:
                         
-                        # Write result to buffer
-                        self.write_buffer.put(self.recorded_data)
+                    #     # Write result to buffer
+                    #     self.write_buffer.put(self.recorded_data)
                         
-                        # Notify the downstream thread, that item has been 
-                        # placed in the write buffer
-                        self.write_condition.notify()
+                    #     # Notify the downstream thread, that item has been 
+                    #     # placed in the write buffer
+                    #     self.write_condition.notify()
                     
-                    # Reset recorded data for next recording
-                    self.recorded_data = []
+                    # # Reset recorded data for next recording
+                    # self.recorded_data = []
 
             # Signal that processing on this item in the read_buffer is done
             # self.read_buffer.task_done()
@@ -516,7 +533,91 @@ class Record_Thread(RWThread):
                 cv2.destroyWindow(self.window_name)
 
                 
+    
+    def _initialize_recording_directory(self):
+        '''
+        Creates a folder in the specified save directory based on the current
+        datetime and the ID of the sensor the data is coming from.
+
+        Returns
+        -------
+        None.
+
+        '''
+        # Create a folder with an expressive name
+        current_datetime = datetime.now()
+        formatted_datetime = current_datetime.strftime("%d_%m_%y_%H%M")
+        DevID = self.pre_record_buffer[-1]['DevID']
+        folder = self.save_dir / (formatted_datetime + '_' + str(DevID))
+        
+        folder.mkdir(parents=True, exist_ok=True)
+        
+        # Within that folder, create a file for each entry in the data-dict
+        # that is to be written to file
+        self.file_path = {}
+        for key in self.save_keys:
+            # Save data path as attribute
+            self.file_path[key] = folder / (key+".txt")
             
+            # Use touch to create the file, if it doesn't exist
+            self.file_path[key].touch()
+    
+    def _write_data_to_files(self,data:list):
+        """
+        Writes the values of specified keys (self.save_keys) to corresponding
+        files. 
+
+        Parameters
+        ----------
+        data : list or iterable
+            A list containing dictionaries.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Loop through the iterable containing the data packages as dicts
+        for data_dict in data:
+            
+            # Loop over keys to write to file
+            for key in self.save_keys:
+                
+                # Check if key is in data dict
+                if key in data_dict:
+                    
+                    # Check if corresponding file is empty
+                    file_empty = os.path.getsize(self.file_path[key]) == 0
+                            
+                    # Parse values behind keys to a header and a numpy array
+                    if key == 'bboxes':
+                        
+                        values = data_dict[key].values.flatten()
+                        header = list(data_dict[key].columns)
+                        
+                    if key == 'frame':
+                        
+                        # Frame is in the format of a numpy array and needs to 
+                        # be parsed to a pandas DataFrame
+                        values = data_dict[key]
+                        header = self.tparray.get_serial_data_order()
+                    
+                    # If file was empty, write a header first
+                    if file_empty:
+                        
+                        with open(self.file_path[key],'w',newline='') as file:
+                            writer = csv.writer(file)
+                            writer.writerow(header)
+
+                    
+                    # In any case write values to file
+                    if len(values)!=0:
+                        with open(self.file_path[key],'a',newline='') as file:
+                            writer = csv.writer(file)
+                            writer.writerow(values)
+               
+    
     def stop(self):
         self._exit = True
             
