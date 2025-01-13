@@ -165,10 +165,7 @@ class RThread(Thread):
         
                 # Execute target function
                 result = self._target()
-                
-                # Signal that processing on this item in the read_buffer is done
-                # self.read_buffer.task_done()
-                
+               
                 # Notify the upstream thread, that the item has been retrieved
                 # from the buffer
                 self.read_condition.notify()

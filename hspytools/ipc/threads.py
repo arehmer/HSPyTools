@@ -289,8 +289,8 @@ class Record_Thread(RWThread):
         
         self.save_dir = kwargs.pop('save_dir',Path.cwd())                       # Directory to write results and recorded data to
         self.save_keys = ['bboxes','frame']                                     # Keys of values in the received data that are to be written to files
+        self.rec_dir = None                                                     # Directory within save_dir, where recorded data is saved. Created automatically.
         self.file_path = {}                                                     # Dictionary of file paths
-        self.file = None                                                        # File handle to write data to
         
         # Set time
         self.t0 = time.time() 
@@ -314,9 +314,6 @@ class Record_Thread(RWThread):
             DESCRIPTION.
 
         """
-        
-        # print('Executed record thread: ' + str(time.time()-self.t0) )
-        
         
         # Get result from upstream thread
         result = self.read_buffer.get()
@@ -428,11 +425,7 @@ class Record_Thread(RWThread):
 
                 # Execute target function to get data from upstream thread
                 data = self._target()
-                
-                # Notify the upstream thread, that the item has been retrieved
-                # from the buffer
-                self.read_condition.notify()
-                
+                               
                 ############ Plotting part  ###################################
                 if (data['success'] == True) and (self.imshow == True):
                     
@@ -456,71 +449,67 @@ class Record_Thread(RWThread):
                     
                     cv2.imshow(self.window_name,frame)
                     cv2.waitKey(1)
-                    
-                    # Notify the upstream thread, that the item has been retrieved
-                    # from the buffer
-                    self.read_condition.notify()
-            
         
-            ############ Recording part #######################################
-            # Check if we're currently recording
-            if not self.recording:
-
-                # Before recording, keep buffering the incoming data
-                self.pre_record_buffer.append(data)
-
-                # Check the start condition
-                if self._start_condition(data):
-                    
-                    # Once the starting condition is met, initialize
-                    # a new folder and files in it to write to
-                    self._initialize_recording_directory()
-                    
-                    # Write the pre-buffered data to the created files
-                    self._write_data_to_files(self.pre_record_buffer)
-                    
-                    # Clear the pre-recorded buffer
-                    self.pre_record_buffer.clear()  
-                    
-                    # Set recording flag
-                    self.recording = True
-                    
-                    print("Recording started at frame " + str(data['image_id']) + \
-                          ". Pre-recorded data included.")
-
-                    
-            else:
-
-                # During recording, write new data to file immediately
-                self._write_data_to_files([data])
-                
-                # self.recorded_data.append(data)
-
-                # Check if the stop condition is met
-                if self._stop_condition(data):
-                    
-                    # If so, unset recording flag
-                    print("Recording stopped.")
-                    self.recording = False
-                    
-                    # # Put the whole recorded data in the write buffer
-                    # # Acquire the write condition
-                    # with self.write_condition:
+                ############ Recording part #######################################
+                # Check if we're currently recording
+                if not self.recording:
+    
+                    # Before recording, keep buffering the incoming data
+                    self.pre_record_buffer.append(data)
+    
+                    # Check the start condition
+                    if self._start_condition(data):
                         
-                    #     # Write result to buffer
-                    #     self.write_buffer.put(self.recorded_data)
+                        # Once the starting condition is met, initialize
+                        # a new folder and files in it to write to
+                        self._initialize_recording_directory()
                         
-                    #     # Notify the downstream thread, that item has been 
-                    #     # placed in the write buffer
-                    #     self.write_condition.notify()
+                        # Write the pre-buffered data to the created files
+                        self._write_data_to_files(self.pre_record_buffer)
+                        
+                        # Clear the pre-recorded buffer
+                        self.pre_record_buffer.clear()  
+                        
+                        # Set recording flag
+                        self.recording = True
+                        
+                        print("Recording started at frame " + str(data['image_id']) + \
+                              ". Pre-recorded data included.")
+    
+                        
+                else:
+    
+                    # During recording, write new data to file immediately
+                    self._write_data_to_files([data])
                     
-                    # # Reset recorded data for next recording
-                    # self.recorded_data = []
-
-            # Signal that processing on this item in the read_buffer is done
-            # self.read_buffer.task_done()
-
-            
+                    # self.recorded_data.append(data)
+    
+                    # Check if the stop condition is met
+                    if self._stop_condition(data):
+                        
+                        # If so, unset recording flag
+                        print("Recording stopped.")
+                        self.recording = False
+                        
+                        # Inform the downstream thread that recorded data is available
+                        # Acquire the write condition
+                        with self.write_condition:
+                            
+                            # Write result to buffer
+                            self.write_buffer.put({'rec_dir':self.rec_dir})
+                            
+                            # Notify the downstream thread, that item has been 
+                            # placed in the write buffer
+                            self.write_condition.notify()
+                        
+                        # Reset some class attributes
+                        self.rec_dir = None
+                        self.file_path = {}
+                        
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer and processed
+                self.read_condition.notify()
+        
         # If thread was stopped during recording, put the current data in the
         # write buffer and destroy the cv window if it exists
         if self._exit == True:
@@ -531,8 +520,6 @@ class Record_Thread(RWThread):
             
             if self.imshow == True:
                 cv2.destroyWindow(self.window_name)
-
-                
     
     def _initialize_recording_directory(self):
         '''
@@ -544,20 +531,20 @@ class Record_Thread(RWThread):
         None.
 
         '''
-        # Create a folder with an expressive name
+        # Create a folder to write recorded data to
         current_datetime = datetime.now()
-        formatted_datetime = current_datetime.strftime("%d_%m_%y_%H%M")
+        formatted_datetime = current_datetime.strftime("%d_%m_%y_%H%M%S")
         DevID = self.pre_record_buffer[-1]['DevID']
-        folder = self.save_dir / (formatted_datetime + '_' + str(DevID))
+        self.rec_dir = self.save_dir / (formatted_datetime + '_' + str(DevID))
         
-        folder.mkdir(parents=True, exist_ok=True)
+        self.rec_dir.mkdir(parents=True, exist_ok=True)
         
         # Within that folder, create a file for each entry in the data-dict
         # that is to be written to file
         self.file_path = {}
         for key in self.save_keys:
             # Save data path as attribute
-            self.file_path[key] = folder / (key+".txt")
+            self.file_path[key] = self.rec_dir / (key+".txt")
             
             # Use touch to create the file, if it doesn't exist
             self.file_path[key].touch()
@@ -621,7 +608,8 @@ class Record_Thread(RWThread):
     def stop(self):
         self._exit = True
             
-            
+
+
 class FileWriter_Thread(RThread):
     """
     Thread for writing data into a file.
@@ -666,9 +654,6 @@ class FileWriter_Thread(RThread):
                 # function
                 data = self._target_function()
 
-                # Notify the upstream thread, that the item has been retrieved
-                # from the buffer
-                self.read_condition.notify()
                 
                 # Data is a list of dictionaries, which need to be organized 
                 # properly in order to be stored as a file
@@ -693,6 +678,10 @@ class FileWriter_Thread(RThread):
                     
                 except self.read_buffer.empty:
                     continue
+                
+                # Notify the upstream thread, that the item has been retrieved
+                # from the buffer
+                self.read_condition.notify()
             
     def _organize_data(self,data:list):
         """
