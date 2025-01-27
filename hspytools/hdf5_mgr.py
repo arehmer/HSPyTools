@@ -101,7 +101,7 @@ class hdf5_mgr():
             
         """
         
-        with h5py.File(self._hdf5_path, 'w') as hdf_file:
+        with h5py.File(self._hdf5_path, 'a') as hdf_file:
             types_group = hdf_file.create_group(target_group)
             for key, value in dictionary.items():
                 types_group.attrs[key] = value
@@ -168,8 +168,16 @@ class hdf5_mgr():
         
         df_index = pd.read_hdf(self._hdf5_path, address)
         
+        # Check if hdf5-index contains any entries at this point
         if len(self.hdf5Index_dtypes)!=0 and len(df_index.columns)!=0:
-            df_index = df_index.astype(self.hdf5Index_dtypes)
+            # Create the intersection between columns in the hdf5-index
+            # and the keys in the hdf5Index_dtypes
+            index_columns = list(df_index.columns)
+            dtypes_keys =  list(self.hdf5Index_dtypes)
+            intersect_keys = set(index_columns).intersection(dtypes_keys)
+            
+            # Cast types of hdf5-Index as specified
+            df_index = df_index.astype({key:self.hdf5Index_dtypes[key] for key in intersect_keys} )
        
         return df_index
     
