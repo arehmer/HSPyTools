@@ -40,7 +40,6 @@ class TPArray():
             self.Pitch = 90.0e-6
             self.Ampl = 40
             
-            print('8x8.json has not yet been tested!')
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '8x8.json'
             # Load calibration data from file
