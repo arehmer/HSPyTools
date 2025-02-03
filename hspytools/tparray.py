@@ -40,6 +40,8 @@ class TPArray():
             self.Pitch = 90.0e-6
             self.Ampl = 40
             
+            self._mask = np.ones(self._npsize)
+
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '8x8.json'
             # Load calibration data from file
@@ -56,6 +58,8 @@ class TPArray():
             self._NETD = 130
             self.Pitch = 90.0e-6    #equal for r3
             self.Ampl = 40          #equal for r3  
+            
+            self._mask = np.ones(self._npsize)
             
             print('16x16.json has not yet been tested!')
             # path to array data
@@ -75,6 +79,8 @@ class TPArray():
             self.Pitch = 90.0e-6
             self.Ampl = 40            
             
+            self._mask = np.ones(self._npsize)
+            
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '32x32.json'
             # Load calibration data from file
@@ -89,7 +95,9 @@ class TPArray():
             self._package_size = 1283
             self._fs = 41
             self._NETD = 70
-           
+            
+            self._mask = np.ones(self._npsize)
+            
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '80x64.json'
             # Load calibration data from file
@@ -108,6 +116,8 @@ class TPArray():
             self.Pitch = 60.0e-6
             self.Ampl = 60               
            
+            self._mask = np.ones(self._npsize)
+            
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '60x84.json'
             # Load calibration data from file
@@ -163,6 +173,8 @@ class TPArray():
             self._NETD = 110
             self.Pitch = 45.0e-6        #equal for r1
             self.Ampl = 60              #40 for r1         
+            
+            self._mask = np.ones(self._npsize)
             
             # path to array data
             path = Path(__file__).parent / 'arraytypes' / '160x120.json'
