@@ -202,7 +202,9 @@ class hdf5_mgr():
             keys = list(hdf5_file[lut_address].keys())
         
         # Load dfs for every key into dictionary 
-        LuT = {key:self.load_df(lut_address + '/' + key) for key in keys}
+        LuT =  self.load_df(lut_address)
+        # {key:self.load_df(lut_address + '/' + key) for key in keys}
+        
         
         return LuT
     

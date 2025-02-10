@@ -283,12 +283,15 @@ class LuT:
                 LuT_col = LuT.columns[col_idx][-1]
                 Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
             else:
+                # If so, write error value to data and skip
+                data.loc[meas,'To_LuT'] = -99
                 continue
             
             # Check if Ud is outside of the range of the LuT
             row_idx = LuT.index < Ud
             if all(row_idx==True) or all(row_idx==False):
-                # If so, skip
+                # If so, write error value to data and skip
+                data.loc[meas,'To_LuT'] = -99
                 continue
             
             

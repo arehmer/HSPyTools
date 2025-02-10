@@ -271,13 +271,7 @@ class TPArray():
             eeprom_adresses = json.load(file)
         
         self._eeprom_adresses =  eeprom_adresses
-
-            
-    def _comp_eloff(self):
-        
-        pass
-        
-    
+   
     def get_DevConst(self):
         return self._DevConst
     
@@ -663,13 +657,10 @@ class TPArray():
         for i in df_meas.index:
             
             df_frame = df_meas.loc[i]
-            frame_orig = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
-            
-            df_frame = self._comp_thermal_offset(df_frame.copy())
-            frame_thoff = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
             
             df_frame = self._comp_electrical_offset(df_frame)
-            frame_eoff = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
+            
+            df_frame = self._comp_thermal_offset(df_frame.copy())
             
             # Vdd compensation for all sensors but 8x8
             if not (self.width,self.height) == (8,8) :
@@ -698,14 +689,36 @@ class TPArray():
         
         # Perform all compensation operations on data
         df_meas = self.rawmeas_comp(df_meas)
+              
+        df_dK = []
         
-        
-        # Load LuT
-        LuT = self.LuT.copy()
+        # Map every single pixel to the LuT
+        for i in df_meas.index:
+            
+            df_frame = df_meas.loc[i]
+            
+            for p in self._pix:
                 
-        raise Warning('''rawmeas_to_dK returns compensated voltage, not dK! Remaining operations need to be implemented for dataframe format!''')
+                Ud = df_frame[p]
+                Tamb0 = df_frame[self._T_amb[0]] / 10   # Convert from dK to K
+                
+                pnt = pd.DataFrame(data = [[Ud,Tamb0]],
+                                   columns = ['Ud','Tamb0'])
+                
+                # try:
+                pnt = self._LuT.eval_LuT(pnt)
+                # except:
+                    # print(pnt)
+                    # raise Exception('Error converting the printed measurement')
+                df_frame[p] = int(pnt['To_LuT'].item()*10)
+                
+            # Convert back to DataFrame
+            df_frame = pd.DataFrame(df_frame).transpose()
+            df_dK.append(df_frame)
+                
+        df_dK = pd.concat(df_dK)
         
-        return df_meas
+        return df_dK
     
     def _binary_mask(self,r_lim:float)->np.ndarray:
         """

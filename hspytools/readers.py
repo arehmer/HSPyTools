@@ -232,7 +232,7 @@ class HTPAdGUI_FileReader():
             
         return None
 
-    def export_txt(self,df_video,header,txt_path,**kwargs):
+    def export_txt(self,df_video:pd.DataFrame,header:str,txt_path:Path,**kwargs):
         """
         Export a video sequence in dataframe format to a .txt file that is
         compatible with HTPAdGUI
