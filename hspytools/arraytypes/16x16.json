@@ -1,0 +1,67 @@
+{
+	"EEPROM":
+	{
+
+	"pixcmin": {
+		"dtype": "float32",
+		"adr_start": "0x00",
+		"adr_stop":  "0x03"},
+
+	"pixcmax": {
+		"dtype": "float32",
+		"adr_start": "0x04",
+		"adr_stop":  "0x07"},
+
+	"gradScale": {
+		"dtype": "uint8",
+		"adr_start": "0x10",
+		"adr_stop":  "0x10"},
+
+
+	"globalGain": {
+		"dtype": "uint16",
+		"adr_start": "0x12",
+		"adr_stop": "0x13"},
+
+	"epsilon": {
+		"dtype": "uint8",
+		"adr_start": "0x1A",
+		"adr_stop":  "0x1A"},
+
+	"ptatGrad": {
+		"dtype": "float32",
+		"adr_start": "0x68",
+		"adr_stop":  "0x6B"},
+
+	"ptatOffset": {
+		"dtype": "float32",
+		"adr_start": "0x6C",
+		"adr_stop":  "0x6F"},
+
+
+	"vddCompGrad": {
+		"dtype": "int12",
+		"adr_start": "0x80",
+		"adr_stop":  "0x13E"},
+
+	"vddCompOff": {
+		"dtype": "int12",
+		"adr_start": "0x140",
+		"adr_stop":  "0x1FE"},
+
+	"thGrad": {
+		"dtype": "int16",
+		"adr_start": "0x200",
+		"adr_stop":  "0x3FE"},
+
+	"thOff": {
+		"dtype": "int16",
+		"adr_start": "0x400",
+		"adr_stop":  "0x5FE"},
+
+	"pij": {
+		"dtype": "uint16",
+		"adr_start": "0x600",
+		"adr_stop":  "0x7FE"}
+	}
+}

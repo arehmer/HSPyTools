@@ -417,7 +417,11 @@ class TPArray():
         elif dtype == 'int8':
             b_idx = np.arange(0,len(raw_val),1)
             conv_val = [struct.unpack('b',raw_val[b:b+1])[0] for b in  b_idx] 
-            
+
+        elif dtype == 'int12':
+            b_idx = np.arange(0,len(raw_val),1)
+            conv_val = self._extract_signed_12bit(raw_val)
+
         elif dtype == 'int16':
             b_idx = np.arange(0,len(raw_val),2)
             conv_val = [struct.unpack('<h',raw_val[b:b+2])[0] for b in  b_idx] 
@@ -426,6 +430,30 @@ class TPArray():
             Exception('Unknown datatype')
             conv_val = None
         
+        return conv_val
+
+    def _extract_signed_12bit(self,raw_val):
+        conv_val = []
+        
+        # Iterate over bytes in steps of 1.5 bytes (2 bytes per 12-bit pair)
+        for i in range(0, len(raw_val) - 1, 3):  
+            if i == 189:
+                pass
+            # Read 3 bytes at a time to extract two 12-bit values
+            byte1, byte2, byte3 = raw_val[i], raw_val[i+1], raw_val[i+2]
+    
+            # First 12-bit integer (from byte1 and half of byte2)
+            val1 = ((byte1 << 4) | (byte2 >> 4)) & 0xFFF
+            if val1 & 0x800:  # Check sign bit (bit 11)
+                val1 -= 0x1000  # Sign extend to 16-bit
+    
+            # Second 12-bit integer (from byte2 and byte3)
+            val2 = (((byte2 & 0x0F) << 8) | byte3) & 0xFFF
+            if val2 & 0x800:  # Check sign bit (bit 11)
+                val2 -= 0x1000  # Sign extend to 16-bit
+    
+            conv_val.extend([val1, val2])
+    
         return conv_val
 
     def _comp_thermal_offset(self,df_meas:pd.Series):
@@ -458,7 +486,26 @@ class TPArray():
         
         return df_meas
     
-    def _comp_electrical_offset(self,df_meas):
+    def _comp_electrical_offset(self,df_meas:pd.Series):
+        """
+        
+
+        Parameters
+        ----------
+        df_meas : pd.Series
+            Single measurement as pandas Series.
+
+        Returns
+        -------
+        df_meas : pd.Series
+            Measurement compensated by electrical offsets.
+
+        """
+        
+        if not isinstance(df_meas,pd.Series):
+            raise Exception('Excpected a single measurement frame as pd.Series')
+            return None
+        
         
         ''' Electrical offset compensation '''
         ElOff = df_meas[self._e_off]
