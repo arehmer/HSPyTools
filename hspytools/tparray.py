@@ -250,23 +250,7 @@ class TPArray():
     def height(self,h):
         self._height = h
 
-    # @property
-    # def size(self):
-    #     return self._height
-    # @size.setter
-    # def size(self,size):
-    #     self._size = size
-
-    # @property
-    # def npsize(self):
-    #     return self._npsize
-    # @npsize.setter
-    # def height(self,npsize):
-    #     self._npsize = npsize        
-        
-        
-        
-        
+       
     def _load_calib_json(self, path:Path):
         
         with open(path,'r') as file:
@@ -437,20 +421,19 @@ class TPArray():
         
         # Iterate over bytes in steps of 1.5 bytes (2 bytes per 12-bit pair)
         for i in range(0, len(raw_val) - 1, 3):  
-            if i == 189:
-                pass
-            # Read 3 bytes at a time to extract two 12-bit values
-            byte1, byte2, byte3 = raw_val[i], raw_val[i+1], raw_val[i+2]
+            
+            if i + 2 >= len(raw_val):
+                break  # Ensure we have a full 3-byte set
+            
+            b1, b2, b3 = raw_val[i], raw_val[i+1], raw_val[i+2]
     
-            # First 12-bit integer (from byte1 and half of byte2)
-            val1 = ((byte1 << 4) | (byte2 >> 4)) & 0xFFF
-            if val1 & 0x800:  # Check sign bit (bit 11)
-                val1 -= 0x1000  # Sign extend to 16-bit
-    
-            # Second 12-bit integer (from byte2 and byte3)
-            val2 = (((byte2 & 0x0F) << 8) | byte3) & 0xFFF
-            if val2 & 0x800:  # Check sign bit (bit 11)
-                val2 -= 0x1000  # Sign extend to 16-bit
+            # Reconstruct two 12-bit values
+            val1 = ((b2 & 0x0F) << 8) | b1  # First 12-bit value (lower byte first)
+            val2 = (b3 << 4) | (b2 >> 4)    # Second 12-bit value    
+            
+            # Convert to signed 12-bit integers
+            val1 = val1 - 2048 # if val1 >= 2048 else val1
+            val2 = val2 - 2048 # if val2 >= 2048 else val2
     
             conv_val.extend([val1, val2])
     
@@ -539,7 +522,7 @@ class TPArray():
         
         return df_meas
         
-    def _comp_vdd(self,df_meas):
+    def _comp_vdd(self,df_meas:pd.Series):
         
         ''' Vdd compensation '''
         
@@ -599,7 +582,7 @@ class TPArray():
         
         return df_meas
     
-    def _comp_sens(self,df_meas):
+    def _comp_sens(self,df_meas:pd.Series):
         
         Pixel = df_meas[self._pix] 
         pixel_dtype = df_meas[self._pix].dtypes
@@ -617,7 +600,7 @@ class TPArray():
         PixC = (( Pij.reshape((-1,1)) * (PixCmax-PixCmin)  / 65535)  + PixCmin) \
             * eps/100 * GlobGain/10000
             
-        # Compensate pixel voltage
+        # Apply pixel constants
         VijPixC =  Pixel * self._PCSCALEVAL / PixC.flatten()
         
         # Write to dataframe
@@ -625,7 +608,7 @@ class TPArray():
         
         return df_meas
         
-    def _calc_Tamb0(self,df_meas):
+    def _calc_Tamb0(self,df_meas:pd.Series):
         
         ptat_av = df_meas[self._PTAT].mean()
         
@@ -689,6 +672,44 @@ class TPArray():
         return block_dict
     
     
+    def Ucomp2Uscaled(self,df_meas:pd.DataFrame):
+        """
+        Apply sensitivity coefficients to provided data. Data should contain 
+        measurements, to which electrical offsets as well as thermal and vdd 
+        compensation have already been applied.
+
+        Parameters
+        ----------
+        df_meas : pd.DataFrame
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        """
+    
+        # Convert pixel values to signed interger 64bit
+        df_meas = df_meas.astype(np.int64)
+        
+        df_calib = []
+        
+        for i in df_meas.index:
+            
+            df_frame = df_meas.loc[i]
+            
+            df_frame = self._comp_sens(df_frame)
+                
+            df_frame = self._calc_Tamb0(df_frame)
+        
+            # Convert back to DataFrame
+            df_frame = pd.DataFrame(df_frame).transpose()
+            df_calib.append(df_frame)
+        
+        df_calib = pd.concat(df_calib)
+        
+        return df_calib
+    
     def rawmeas_comp(self,df_meas:pd.DataFrame,**kwargs):
         """
         Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
@@ -718,8 +739,7 @@ class TPArray():
             # Compensate pixel constants only on demand
             if comp_sense == True:
                 df_frame = self._comp_sens(df_frame)
-                frame_pixc = df_frame['pix0':'pix63'].values.reshape((8,8)).copy()
-            
+                
             df_frame = self._calc_Tamb0(df_frame)
         
             # Convert back to DataFrame
@@ -730,7 +750,7 @@ class TPArray():
         
         return df_calib
     
-    def rawmeas_to_dK(self,df_meas):
+    def rawmeas_to_dK(self,df_meas:pd.DataFrame):
         """
         Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
         no conversion in dK

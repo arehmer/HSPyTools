@@ -218,6 +218,9 @@ class hdf5_mgr():
         # Load dfs for every key into dictionary 
         BCC = {key:self.load_df(bcc_address + '/' + key) for key in keys}
         
+        # Convert BCC into numpy arrays
+        BCC = {key:BCC[key].values for key in BCC.keys()}
+        
         return BCC
     
     def delete_BCC(self,bcc_name):

@@ -38,30 +38,29 @@
 		"adr_start": "0x6C",
 		"adr_stop":  "0x6F"},
 
-
 	"vddCompGrad": {
 		"dtype": "int12",
 		"adr_start": "0x80",
-		"adr_stop":  "0x13E"},
+		"adr_stop":  "0x13F"},
 
 	"vddCompOff": {
 		"dtype": "int12",
 		"adr_start": "0x140",
-		"adr_stop":  "0x1FE"},
+		"adr_stop":  "0x1FF"},
 
 	"thGrad": {
 		"dtype": "int16",
 		"adr_start": "0x200",
-		"adr_stop":  "0x3FE"},
+		"adr_stop":  "0x3FF"},
 
 	"thOff": {
 		"dtype": "int16",
 		"adr_start": "0x400",
-		"adr_stop":  "0x5FE"},
+		"adr_stop":  "0x5FF"},
 
 	"pij": {
 		"dtype": "uint16",
 		"adr_start": "0x600",
-		"adr_stop":  "0x7FE"}
+		"adr_stop":  "0x7FF"}
 	}
 }

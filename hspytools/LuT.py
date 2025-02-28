@@ -44,8 +44,8 @@ class LuT:
     def LuT_from_xlsx(self,xlsx_path,sheet_name,**kwargs):
         
         index_col = kwargs.pop('index_col',0)
-        usecols = kwargs.pop('usecols','A,D:O')
-        skiprows = kwargs.pop('skiprows',12)
+        usecols = kwargs.pop('usecols','A,D:P')
+        skiprows = kwargs.pop('skiprows',15)
         header = kwargs.pop('header',0)
         # dtype = kwargs.pop('dtype','object')
         
@@ -97,7 +97,7 @@ class LuT:
         
         LuT.to_excel(writer,
                      sheet_name = xlsx_path.stem,
-                     startrow=12,
+                     startrow=15,
                      index=False)
         
         # Then write normalized Ud to row 9
@@ -121,7 +121,7 @@ class LuT:
         
         df_V.to_excel(writer,
                       sheet_name = xlsx_path.stem,
-                      startrow=9,
+                      startrow=12,
                       index=True,
                       header=False)
         
@@ -149,18 +149,19 @@ class LuT:
         
         df_Ta.to_excel(writer,
                        sheet_name = xlsx_path.stem,
-                       startrow=10,
+                       startrow=13,
                        index=True,
                        header=False)
         
         writer.close()
             
     def LuT_from_HTPAxls(self,sheet_name,**kwargs):
+        print('Loading LuT ' + sheet_name + ' ...')
         xlsx_standard = Path('T:/Projekte/HTPA8x8_16x16_32x31/Datasheet/LookUpTablesHTPA.xlsm')
         
         xlsx_path = kwargs.pop('xlsx_path',xlsx_standard)
         self.LuT_from_xlsx(xlsx_path,sheet_name,**kwargs)
-        
+        print('Finished.')
         return None
         
     def inverse_eval_LuT(self,data:pd.DataFrame,
@@ -251,7 +252,7 @@ class LuT:
 
         Parameters
         ----------
-        data : pd.DataFrame. Contains ambient temperature in Ta_col in dK
+        data : pd.DataFrame. Contains ambient temperature in Ta_col in Kelvin
             and pixel voltage in digits in Ud_col
             DESCRIPTION.
         Ta_col : TYPE, optional
@@ -279,7 +280,7 @@ class LuT:
             col_idx = LuT.columns < Ta_meas
             
             # Check if Ta_meas is outside of the range of the LuT
-            if not all(col_idx==True):
+            if not (all(col_idx==True) or all(col_idx==False)):
                 LuT_col = LuT.columns[col_idx][-1]
                 Ta_col_n = LuT.columns[LuT.columns.get_loc(LuT_col)+1]
             else:
