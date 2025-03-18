@@ -209,6 +209,10 @@ class QuadriPolygon():
             # intersect the line
             if k[0]<-10E-6 or k[1]>1 or k[1]<-10E-6:
                 intersect.append(False)
+            elif k[0] == 0 or k[1]==0:
+                    # In the rare case that a point is exactly on an edge,
+                    # return True immediately
+                    return True
             else:
                 intersect.append(True)
             
@@ -297,6 +301,10 @@ class QuadriPolygon():
             # Distance between intersection and point
             dist.append(np.linalg.norm(pnt-isect))
         
+        # Check if the projection of the point pnt onto the edges of the polygon
+        # lies on the edges of the polygon or its "extension" (i.e. a point
+        # somewhere on the linear function that describes the edge but beyond
+        # the defined polygon)
         if len(dist)>0:
             
             # Find minimal distance
@@ -306,8 +314,9 @@ class QuadriPolygon():
             isect = intersect[idx_min]
             
             # check if that point is in the polygon
-            if self.in_polygon(isect+0.001*isect) or \
-                self.in_polygon(isect-0.001*isect):
+            # if self.in_polygon(isect):
+            if self.in_polygon(isect+10E-6*isect) or \
+                self.in_polygon(isect-10E-6*isect):
                     
                     
                     # Convert from series to dataframe
@@ -370,8 +379,8 @@ class QuadriPolygon():
             isect = intersect[idx_min]
             
             # Check if intersection is in polygon 
-            if self.in_polygon(isect+0.001*isect) or \
-                self.in_polygon(isect-0.001*isect):
+            if self.in_polygon(isect+10E-6*isect) or \
+                self.in_polygon(isect-10E-6*isect):
                     # Convert from series to dataframe
                     df_isect = pd.DataFrame(data=[isect.values],
                                             columns=isect.index,

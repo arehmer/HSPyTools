@@ -136,7 +136,7 @@ class TPArray():
             self._NETD = 130
             self.Pitch = 60.0e-6
             self.Ampl = 60               
-            r_lim = 60
+            r_lim = 60-4
             
             self._mask = self._binary_mask(r_lim) 
             

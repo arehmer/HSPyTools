@@ -161,7 +161,7 @@ class LuT:
         
         xlsx_path = kwargs.pop('xlsx_path',xlsx_standard)
         self.LuT_from_xlsx(xlsx_path,sheet_name,**kwargs)
-        print('Finished.')
+        print(sheet_name + 'successfully loaded.')
         return None
         
     def inverse_eval_LuT(self,data:pd.DataFrame,
