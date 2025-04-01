@@ -10,6 +10,14 @@ import json
 from pathlib import Path
 import struct
 
+import warnings
+
+# This needs to be an exact copy of the enum from TPArray.hpp
+SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
+               'HTPA120x84DR2_L3K95_0K8':1,
+               'SENSOR_TYPE_NONE' : 99}
+
+
 class TPArray():
     """
     Class contains hard-coded properties of Thermopile-Arrays relevant
@@ -18,10 +26,19 @@ class TPArray():
     
     def __init__(self,**attr_dict):
         
+        self._SensorType = attr_dict.pop('SensorType',None)
+        
+        if (self.SensorType == SensorTypes['HTPA60x40D_L1K9_0K8']):
+            self._width = 60
+            self._height = 40
+        elif self.SensorType is None:
+            self._width = attr_dict.pop('width',None)
+            self._height = attr_dict.pop('height',None)
+            print('SensorType not specified!')
+        else:
+            raise Exception('SensorType not known!')
         
         # Basic attributes
-        self._width = attr_dict.pop('width',None)
-        self._height = attr_dict.pop('height',None)
         self._size = (self.width,self.height)
         self._npsize = (self.height,self.width)
         
@@ -235,6 +252,13 @@ class TPArray():
         self._ATC = ATC
         
         self._serial_data_order = pix + e_off + vdd + T_amb + PTAT + ATC
+
+    @property
+    def SensorType(self):
+        return self._SensorType
+    @SensorType.setter
+    def SensorType(self,sensorType:int):
+        self._SensorType = sensorType
         
     @property
     def width(self):
@@ -377,8 +401,29 @@ class TPArray():
         
         self._bcc = bcc 
         
+        self._checkBCC()
+        
         return bcc
     
+    def _checkBCC(self):
+        """
+        Performs a sanity check on the imported BCC. Mostly standard values
+        are checked for and a warning issued to the user if found
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        type_max = {'uint16':65535}
+        
+        # Check if pixel constants are on standard value
+        pij = self._bcc['pij']
+        
+        if (pij == 65535).all():
+            warnings.warn('Pixel constants have not yet been set for this device!')
+
 
     def _convert_raw_bcc(self,raw_val:list,dtype:str):
         """
