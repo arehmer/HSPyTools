@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 import struct
 
+import warnings
+
 # This needs to be an exact copy of the enum from TPArray.hpp
 SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
                'HTPA120x84DR2_L3K95_0K8':1,
@@ -399,8 +401,29 @@ class TPArray():
         
         self._bcc = bcc 
         
+        self._checkBCC()
+        
         return bcc
     
+    def _checkBCC(self):
+        """
+        Performs a sanity check on the imported BCC. Mostly standard values
+        are checked for and a warning issued to the user if found
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        type_max = {'uint16':65535}
+        
+        # Check if pixel constants are on standard value
+        pij = self._bcc['pij']
+        
+        if (pij == 65535).all():
+            warnings.warn('Pixel constants have not yet been set for this device!')
+
 
     def _convert_raw_bcc(self,raw_val:list,dtype:str):
         """
