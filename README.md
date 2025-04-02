@@ -12,19 +12,24 @@ The library was developed using the Anaconda3 distribution of Python 3.11.5. In 
   A virtual environment is used to contain a specific Python interpreter and software libraries and binaries which are needed to support a project.
 
   A virtual environment can be created using `venv`. For example
+
     ```sh
     python -m venv /path/to/new/virtual/environment/hs
     ```
+
   will create a virtual environment called `hs` in the specified path. The environment can be activated by typing
+
     ```sh
       ./path/to/new/virtual/environment/hs/Scripts/activate
     ```
 
 ## Download HSPyTools
 1. Clone this repository either via using the shell
+
    ```sh
    git clone https://github.com/arehmer/HSPyTools.git
     ```
+
    or using the GitHub Desktop-App: ```File-->Clone repository ``` <br>
    <img src="images/screenshot1_github_desktop.png"  height="300">
 
