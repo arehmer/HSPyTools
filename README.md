@@ -13,22 +13,22 @@ The library was developed using the Anaconda3 distribution of Python 3.11.5. In 
 
   A virtual environment can be created using `venv`. For example
 
-    ```sh
-    python -m venv /path/to/new/virtual/environment/hs
-    ```
+  ```sh
+  python -m venv /path/to/new/virtual/environment/hs
+  ```
 
   will create a virtual environment called `hs` in the specified path. The environment can be activated by typing
 
-    ```sh
-      ./path/to/new/virtual/environment/hs/Scripts/activate
-    ```
+  ```sh
+    ./path/to/new/virtual/environment/hs/Scripts/activate
+  ```
 
 ## Download HSPyTools
 1. Clone this repository either via using the shell
 
-   ```sh
-   git clone https://github.com/arehmer/HSPyTools.git
-    ```
+ ```sh
+ git clone https://github.com/arehmer/HSPyTools.git
+  ```
 
    or using the GitHub Desktop-App: ```File-->Clone repository ``` <br>
    <img src="images/screenshot1_github_desktop.png"  height="300">
@@ -50,10 +50,12 @@ The library was developed using the Anaconda3 distribution of Python 3.11.5. In 
 
 ## Check installation
 1. In the shell start the python interpreter via
+
    ```sh
    python
    ```
 2. Then try to import HSPyTools by typing
+
    ```sh
    import hspytools
    ```
