@@ -15,6 +15,7 @@ import warnings
 # This needs to be an exact copy of the enum from TPArray.hpp
 SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
                'HTPA120x84DR2_L3K95_0K8':1,
+               'HTPA160x120DR1_L3K95_0K8':2,
                'SENSOR_TYPE_NONE' : 99}
 
 
@@ -31,6 +32,12 @@ class TPArray():
         if (self.SensorType == SensorTypes['HTPA60x40D_L1K9_0K8']):
             self._width = 60
             self._height = 40
+        elif (self.SensorType == SensorTypes['HTPA120x84DR2_L3K95_0K8']):
+            self._width = 120
+            self._height = 84
+        elif (self.SensorType == SensorTypes['HTPA160x120DR1_L3K95_0K8']):
+            self._width = 160
+            self._height = 120
         elif self.SensorType is None:
             self._width = attr_dict.pop('width',None)
             self._height = attr_dict.pop('height',None)
