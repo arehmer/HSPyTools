@@ -36,93 +36,140 @@ class hdf5_mgr():
         None.
         """
         
-        mode = kwargs.pop('mode','a')
         width = kwargs.pop('width',None)
         height = kwargs.pop('height',None)
         
-        if width == None or height == None:
-            self.tparray = None
-        else:
-            self.tparray = TPArray(width,height)
                 
         # Check if file exists
         if os.path.isfile(hdf5_path) == True:
             file_exists = True
             print('Specified file already exists.' )
-        else:
-            file_exists = False
-            
-        if file_exists and mode == 'w':
-            print('Existing file is deleted.')
-            os.remove(hdf5_path)
-            
         
         # open hdf5_file or create if it doesn't exist
         hdf5_file = h5py.File(hdf5_path, "a")
-        
+                       
         # Check if hdf5_file is empty
         if len(hdf5_file.keys()) == 0:
             is_empty = True
         else:
             is_empty = False
-            # Close hdf5 file
         
         # Save path of hdf5 file for future reference
-        self._hdf5_path = hdf5_file.filename
+        self._hdf5_path = hdf5_path
         
         hdf5_file.close()
-        
-        if is_empty:
-            self._initialize_index()
-            self._initialize_types()
-    
-    # @property
-    # def types(self):
-    #     return self._read_dict_from_hdf5('types')
-    
-    # @types.setter
-    # def types(self,types):
-    #     # Load current type dict from file
-    #     types_old = self._read_dict_from_hdf5('types')
-        
-    #     # Update old dict (in-place operation)
-    #     types_old.update(types)
-        
-    #     # Write new dict back do dictionary        
-    #     self._save_attributes_to_hdf5('types',types_old)
-    
-            
 
-    def _write_dict_to_hdf5(self,target_group,dictionary):
-        """
-        Writes the contents of a dictionary to a group called 'types' in an HDF5 file.
-        
-        Args:
+        # If hdf5 file is completely empty, initialize attributes of the class
+        # and write them to the hdf5 file
+        if is_empty:
+            self.width = kwargs.pop('width',0)
+            self.height = kwargs.pop('height',0)
+            self.hdf5Index_dtypes = kwargs.pop('_hdf5Index_dtypes',{})
             
-        """
-        
-        with h5py.File(self._hdf5_path, 'a') as hdf_file:
-            types_group = hdf_file.create_group(target_group)
-            for key, value in dictionary.items():
-                types_group.attrs[key] = value
-    
-    def _read_dict_from_hdf5(self,target_group):
-        """
-        Reads the contents of the 'types' group in an HDF5 file into a dictionary.
-        
-        Args:
-            filename (str): Name of the HDF5 file to read from.
-        
-        Returns:
-            dict: Dictionary with string keys and string values.
-        """
-        dictionary = {}
-        with h5py.File(self._hdf5_path, 'r') as hdf_file:
-            types_group = hdf_file[target_group]
-            for key, value in types_group.attrs.items():
-                dictionary[key] = value
+            # Also create an empty DataFrame which will serve as a ledger 
+            # of the files content
+            df_index = pd.DataFrame(data = [])
+            df_index.to_hdf(self._hdf5_path, key = 'index')
+              
+        else:
+            # Else read dict with attributes from the file
+            with h5py.File(self._hdf5_path, 'r')  as h5file:
                 
-        return dictionary
+                attr_dict = {}
+                
+                # Loop over all items in attributes
+                for attr_name in h5file['attributes'].keys():
+                    
+                    # Check if item itself has subitems
+                    if not getattr(h5file['attributes/' + attr_name], "keys", False):
+                        attr_dict[attr_name] = \
+                            h5file['attributes/' + attr_name][()]
+                    else:
+                        
+                        attr_dict[attr_name] = {}
+                        
+                        for key in h5file['attributes/' + attr_name].keys():
+                            attr_dict[attr_name][key] = \
+                                h5file['attributes/' + attr_name+ '/' + key][()]
+            
+            # And assign them
+            for attr in attr_dict.keys():
+                setattr(self,attr,attr_dict[attr])
+    
+    @property
+    def hdf5Index_dtypes(self):
+        return self._hdf5Index_dtypes
+    @hdf5Index_dtypes.setter
+    def hdf5Index_dtypes(self,dtypes:dict):
+        self._hdf5Index_dtypes = dtypes
+        self._save_attributes_to_hdf5()        
+    
+            
+    def _save_attributes_to_hdf5(self):
+        """
+        Writes all attributes of the class to the "attributes" group in the
+        associated hdf5 file
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        attr_dict = {attr: getattr(self,attr) for attr in self.__dict__.keys()}
+        
+        # Path does not need to be saved
+        attr_dict.pop('_hdf5_path')
+        
+        # Write attributes of class to file
+        with h5py.File(self._hdf5_path, 'a')  as h5file:
+            for attr_name, attr_val in attr_dict.items():
+                
+                # Check if attributes dataset already exists
+                if 'attributes' in h5file:
+                    # If key already exists in file, delete it
+                    if attr_name in h5file['attributes']:
+                        del h5file['attributes/' + attr_name]
+                
+                # Write the updated attribute to file
+                if isinstance(attr_val,dict):
+                    for key, value in attr_val.items():
+                        h5file['attributes/' + attr_name + '/' + key] = \
+                            value       
+                else:
+                    h5file['attributes/' + attr_name] = attr_val
+
+
+    # def _write_dict_to_hdf5(self,target_group,dictionary):
+    #     """
+    #     Writes the contents of a dictionary to a group called 'types' in an HDF5 file.
+        
+    #     Args:
+            
+    #     """
+        
+    #     with h5py.File(self._hdf5_path, 'a') as hdf_file:
+    #         types_group = hdf_file.create_group(target_group)
+    #         for key, value in dictionary.items():
+    #             types_group.attrs[key] = value
+    
+    # def _read_dict_from_hdf5(self,target_group):
+    #     """
+    #     Reads the contents of the 'types' group in an HDF5 file into a dictionary.
+        
+    #     Args:
+    #         filename (str): Name of the HDF5 file to read from.
+        
+    #     Returns:
+    #         dict: Dictionary with string keys and string values.
+    #     """
+    #     dictionary = {}
+    #     with h5py.File(self._hdf5_path, 'r') as hdf_file:
+    #         types_group = hdf_file[target_group]
+    #         for key, value in types_group.attrs.items():
+    #             dictionary[key] = value
+                
+    #     return dictionary
     
     
     def _initialize_index(self):
