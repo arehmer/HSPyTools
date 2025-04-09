@@ -772,7 +772,10 @@ class TPArray():
         comp_sense = kwargs.pop('comp_sense',True)
         
         # Convert pixel values to signed interger 64bit
-        df_meas = df_meas.astype(np.int64)
+        try:
+            df_meas = df_meas.astype(np.int64)
+        except:
+            pass
         
         df_calib = []
         

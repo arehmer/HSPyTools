@@ -303,6 +303,18 @@ class hdf5_mgr():
                 hdf5_file.copy(source+'/'+group,target+'/'+group)
             
         return None
+
+    def _delete_group(self,group,**kwargs):
+               
+       
+       with h5py.File(self._hdf5_path,  'a') as hdf5_file:
+           
+           if group in hdf5_file:
+               del hdf5_file[group]
+           else:
+               warnings.warn('Group does not exist.')
+
+       return None
     
         
     def _group_exists(self,hdf5_address:str)->bool:

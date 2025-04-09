@@ -189,7 +189,7 @@ class HTPAdGUI_FileReader():
         ----------
         df_video : pd.DataFrame
             DESCRIPTION.
-        header : byte
+        header : byte or str
             DESCRIPTION.
         path : pathlib.Path
             DESCRIPTION.
@@ -207,12 +207,17 @@ class HTPAdGUI_FileReader():
         if bds_path.exists():
             if mode=='x':
                 print('File exists. No data will be written. Pass mode="x" to overwrite.')
+                return None
             elif mode=='w':
                 print('File exists and will be overwritten.')
                 os.remove(bds_path)
         
         # first write the header to the list byte by byte
         bds_content = []
+        
+        if isinstance(header, str):
+            header = header.encode()
+        
         bds_content.append(header)
         # Go over the video sequence image by image, convert all integers to 
         # bytes and append to the list
@@ -224,7 +229,8 @@ class HTPAdGUI_FileReader():
             
             # cast every integer to a byte in little endian byteorder
             for val in row:
-                bds_content.append(int(val).to_bytes(length=2,byteorder='little'))
+                bds_content.append(int(val).to_bytes(length=2,
+                                                     byteorder='little'))
             
         # Write bytes to file
         with open(bds_path, "wb") as bds_file:
@@ -260,6 +266,7 @@ class HTPAdGUI_FileReader():
         if txt_path.exists():
             if mode=='x':
                 print('File exists. No data will be written. Pass mode="x" to overwrite.')
+                return None
             elif mode=='w':
                 print('File exists and will be overwritten.')
                 os.remove(txt_path)
@@ -267,15 +274,22 @@ class HTPAdGUI_FileReader():
             # if it doesn't, create it
             with open(txt_path, 'w') as file:
                 pass
-            
+        
+        # Add a column for the timestamp at the very end for compatbility with
+        # HTPA GUI
+        # df_video['t_string'] = '' 
+        
         # first write the header to the file
         with open(txt_path, 'w') as file:
             header = file.writelines([header])
             
         # Then use pandas' to_csv() method to write the rest of the data to the
         # file
-        df_video.to_csv(txt_path, sep = ' ',mode='a',
-                        header = False, index = False)
+        df_video.to_csv(txt_path,
+                        sep = ' ',
+                        mode='a',
+                        header = False,
+                        index = False)
 
             
         return None    
