@@ -12,6 +12,7 @@ import warnings
 import os
 
 from hspytools.readers import HTPAdGUI_FileReader
+from hspytools.tparray import TPArray
 
 class hdf5_mgr():
 
@@ -445,7 +446,8 @@ class hdf5_mgr():
             
             # Initialize a HTPAdGUI_FileReader, which has a function for 
             # writing DataFrames of video to .png
-            reader = HTPAdGUI_FileReader(w,h)
+            reader = HTPAdGUI_FileReader(TPArray(width = w,
+                                                 height = h))
             
             # Pass the DataFrame to the method for writing to .png
             path = Path.cwd() /  (a+'/png')

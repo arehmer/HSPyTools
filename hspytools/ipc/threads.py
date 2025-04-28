@@ -106,7 +106,7 @@ class UDP(WThread):
         try:
             # Try to assemble a frame from the udp packages
             frame = self.udp_reader.read_continuous_bytestream(self.DevID)
-            
+
             # Set success flag and store frame
             result['success'] = True
             result['frame'] = frame    
@@ -169,11 +169,14 @@ class Imshow(RThread):
         
         # Get result from upstream thread
         result = self.read_buffer.get()
-        
-        # Check success flag of upstream thread
-        if result['success'] is True:
 
-            frame = result['frame_proc']
+        # Check success flag of upstream thread
+        if result['success'] == True:
+
+            if 'frame_proc' in list(result.keys()):
+                frame = result['frame_proc']
+            else:
+                frame = result['frame']
     
             # Reshape if not the proper size
             if frame.ndim == 1:

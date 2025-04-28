@@ -17,22 +17,20 @@ import time
 import subprocess
 import shutil
 
+import warnings
 
 from .tparray import TPArray
 
 class HTPAdGUI_FileReader():
     
-    def __init__(self,width,height):
+    def __init__(self,tparray:TPArray):
         
-        self.width = width
-        self.height = height
+        self.tparray = tparray
         
+        # For convenience
+        self.width = tparray.width
+        self.height = tparray.height
         
-        # Depending on the sensor size, the content of the bds-file is
-        # organized as follows
-        self.tparray = TPArray(width = width,
-                               height = height)
-        # data_order = ArrayType.get_serial_data_order()
                 
     def read_htpa_video(self,path):
         
@@ -279,9 +277,15 @@ class HTPAdGUI_FileReader():
         # HTPA GUI
         # df_video['t_string'] = '' 
         
+        # Convert header to string if provided as bytes
+        if isinstance(header, bytes):
+            header = header.decode('utf-8')
+        
         # first write the header to the file
         with open(txt_path, 'w') as file:
             header = file.writelines([header])
+            
+
             
         # Then use pandas' to_csv() method to write the rest of the data to the
         # file
@@ -476,13 +480,10 @@ class HTPA_ByteStream_Converter():
             
             # Loop over all bytes and combine MSB and LSB
             idx = np.arange(1,len(package),2)
-            
             for i in idx:    
                 self.data[j] = int.from_bytes(package[i:i+2], byteorder='little')
                 j = j+1
-       
-        Warning("Check if pixels are in appropriate order (i.e. if Bodo's)"+\
-                "and pyplots/opencvs coordinate system are the same")
+                
         
         return self.data
     
@@ -753,6 +754,12 @@ class HTPA_UDPReader():
         udp_socket = socket.socket(socket.AF_INET,          # Internet
                                    socket.SOCK_DGRAM)       # UDP
         
+        # Allow re-using socket addresses in case of crashes
+        udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        # Bind socket
+        udp_socket.bind(('0.0.0.0', self._port))
+        
         # Create server address
         server_address = (IP,self._port)
                
@@ -822,12 +829,18 @@ class HTPA_UDPReader():
         udp_socket = socket.socket(socket.AF_INET,          # Internet
                                    socket.SOCK_DGRAM)       # UDP
         
-        # Create server address
-        server_address = (ip,self._port)
+        # Allow re-using socket addresses in case of crashes
+        udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        # Bind socket
+        udp_socket.bind(('0.0.0.0', self._port))
                
         # Set timeout to 1 second
         udp_socket.settimeout(1)
         
+        # Create server address
+        server_address = (ip,self._port)
+                
         # Try calling the device and check if it's a HTPA device
 
         # Stop any stream that might still continue, e.g. if program 
@@ -875,6 +888,7 @@ class HTPA_UDPReader():
         
         # Add socket to dictionary
         dev_id = dev_info.index.item()
+        # udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sockets = {dev_id:udp_socket}
         
         # Append new device to device list and store
@@ -913,6 +927,12 @@ class HTPA_UDPReader():
         
         # Clean up port
         answ = self._read_port(udp_socket,server_address)
+        
+        # Release socket
+        udp_socket.close()
+        
+        # Delete socket from dict
+        del self.sockets[DevID]
         
         print('Released HTPA device with DevID: ' + str(DevID) )
             
@@ -1014,6 +1034,7 @@ class HTPA_UDPReader():
                 try:
                     package = udp_socket.recv(self.tparray._package_size)
                 except socket.timeout:
+                    warnings.warn('Socket timeout!')
                     return np.zeros((len(self.tparray._serial_data_order),))
                     
                 
