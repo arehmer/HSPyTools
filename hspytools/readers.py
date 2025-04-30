@@ -834,12 +834,16 @@ class HTPA_UDPReader():
         
         # Bind socket
         udp_socket.bind(('0.0.0.0', self._port))
-               
+          
+        
         # Set timeout to 1 second
         udp_socket.settimeout(1)
         
         # Create server address
         server_address = (ip,self._port)
+        
+        # Connect
+        udp_socket.connect(server_address)   
                 
         # Try calling the device and check if it's a HTPA device
 
