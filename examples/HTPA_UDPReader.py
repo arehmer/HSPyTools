@@ -6,12 +6,19 @@ Created on Thu Jan 25 09:14:10 2024
 """
 
 from queue import Queue
-import time
 
 from hspytools.readers import HTPA_UDPReader
 from hspytools.tparray import TPArray
-from hspytools.ipc.threads import UDP,Imshow
 
+
+"""
+This script is intended to show the basic functionality of the HTPA_UDPReader
+class, i.e. how to broadcast for htpa devices, bind an htpa device, and start/
+stop the sensor stream.
+
+For actual applications the HTPA_UDPReader needs to be wrapped in a thread. 
+This is demonstrated in HTPA_Threads.py
+"""
 
 
 # %% Parameters provided by the user
@@ -19,39 +26,43 @@ from hspytools.ipc.threads import UDP,Imshow
 width = 60
 height = 40
 
-# Broadcasting has not been implemented yet, therefore the IP of the HTPA
-# device needs to be known in advance
-UDP_IP = '192.168.137.124' 
+# %% Scan for devices
+tparray = TPArray(width = width,
+                  height = height)
 
-# %% Code begins here
-
-tparray = TPArray(width, height)
 udp_buffer = Queue(maxsize=1)
 
 # Create instance of UDP reader
 udp_reader = HTPA_UDPReader(width,height)
 
-# Create instance of UDP thread
-udp_thread = UDP(udp_reader = udp_reader,
-                        dev_ip = UDP_IP,
-                        write_buffer = udp_buffer)
+# Scan for htpa devices in the subnet 192.168.240.0/24
+udp_reader.broadcast('192.168.240.255')
+# print(udp_reader.devices)
 
-
-# Create instance of thread plotting the reveived data
-plot_thread = Imshow(width = width,
-                     height = height,
-                     read_buffer = udp_buffer)
-
-if __name__ == '__main__':
+# Assuming a device has been found, get its DevID and IP
+try:
+    DevID = udp_reader.devices.iloc[0].name
+    IP = udp_reader.devices.iloc[0]['IP']
     
-      
-    udp_thread.start()
-    plot_thread.start()
+    print('Found a device with DevID ' + str(DevID) + \
+          ' and IP ' + str(IP))
     
-    for i in range(1):
-        time.sleep(120)
-        udp_thread.stop()
-        plot_thread.stop()
+except:
+    raise Exception('No device has been found in this subnet!')
+
+
+# %% Next, the device must be bound. This can be achieved either by using
+# its DevID or its IP 
+
+# Binding via IP
+udp_reader.bind_tparray(IP = IP)
+udp_reader.release_tparray(DevID)
+
+# Binding via DevID
+udp_reader.bind_tparray(DevID = DevID)
+udp_reader.release_tparray(DevID)
+
+
         
 
     

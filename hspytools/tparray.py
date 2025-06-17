@@ -41,7 +41,6 @@ class TPArray():
         elif self.SensorType is None:
             self._width = attr_dict.pop('width',None)
             self._height = attr_dict.pop('height',None)
-            print('SensorType not specified!')
         else:
             raise Exception('SensorType not known!')
         

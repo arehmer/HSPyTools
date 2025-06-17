@@ -68,12 +68,12 @@ class UDP(WThread):
         # binding the corresponding htpa device differs
         if (DevID!=-1) and (len(Bcast_Addr)!=0):
             self.udp_reader.broadcast(Bcast_Addr)
-            self.udp_reader.bind(DevID = DevID)
+            self.udp_reader.bind_tparray(DevID = DevID)
             
             # Save DevID of bound device to attribute
             self.DevID = DevID
         elif len(IP)!=0:
-            self.udp_reader.bind(IP = IP)
+            self.udp_reader.bind_tparray(IP = IP)
             
             # Save DevID of bound device to attribute
             devices = self.udp_reader.devices

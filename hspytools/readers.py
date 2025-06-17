@@ -695,7 +695,7 @@ class HTPA_UDPReader():
         
         return devices
     
-    def bind(self,IP:str='',DevID:int=-1):
+    def bind_tparray(self,IP:str='',DevID:int=-1):
         """
         Binds an HTPA device which is specified either via its IP or its DevID.
         If a device is specified via its DevID, it must have been discovered
@@ -714,9 +714,24 @@ class HTPA_UDPReader():
         """
 
         if DevID!=-1:
-            self._bind_discovered_htpa(DevID)
+            
+            # if the DevID is provided, look if a corresponding device has
+            # already been discovered
+            
+            # Check if the specified device exists
+            if DevID not in self.devices.index:
+                raise Exception('Device ' + str(DevID) + ' seems to have not been ' +\
+                                'discovered yet. Discover it via broadcasting first.')
+            
+            
+            # Get the corresponding IP
+            IP = self.devices.loc[DevID,'IP']
+                        
+            # And bind it
+            self._bind_tparray(IP)
+            
         elif len(IP)!=0:
-            self._bind_undiscovered_htpa(IP)
+            self._bind_tparray(IP)
         else:
             print('Either IP or DevID of the device to be bound have to ' +\
                   'be specified!')
@@ -738,10 +753,7 @@ class HTPA_UDPReader():
 
         """
         
-        # Check if the specified device exists
-        if DevID not in self.devices.index:
-            raise Exception('Device ' + str(DevID) + ' seems to have not been ' +\
-                            'discovered yet. Try broadcasting first.')
+
         
         # Get a copy of the row corresponding to this device (as a pd.Series)
         dev_info = self.devices.loc[[DevID]].copy()
@@ -762,6 +774,9 @@ class HTPA_UDPReader():
         
         # Create server address
         server_address = (IP,self._port)
+        
+        # Connect
+        udp_socket.connect(server_address)   
                
         # Set timeout to 1 second
         udp_socket.settimeout(1)
@@ -809,9 +824,9 @@ class HTPA_UDPReader():
 
         """
         
-        self.bind_tparray(IP)
+        self._bind_tparray(IP)
     
-    def bind_tparray(self,ip:str):
+    def _bind_tparray(self,ip:str):
         """
         Creates a socket for the device with the given ip
 
@@ -832,10 +847,9 @@ class HTPA_UDPReader():
         # Allow re-using socket addresses in case of crashes
         udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         
-        # Bind socket
-        udp_socket.bind(('0.0.0.0', self._port))
-          
-        
+        # Bind socket (sometimes needed, sometimes breaks the code)
+        # udp_socket.bind(('0.0.0.0', self._port))
+                 
         # Set timeout to 1 second
         udp_socket.settimeout(1)
         
@@ -849,10 +863,10 @@ class HTPA_UDPReader():
 
         # Stop any stream that might still continue, e.g. if program 
         # crashed 
-        old_packages = self.stop_continuous_bytestream(IP = ip)
+        _ = self.stop_continuous_bytestream(IP = ip)
         
         # Try to call device
-        _ = udp_socket.sendto(bytes('Calling HTPA series devices',
+        test = udp_socket.sendto(bytes('Calling HTPA series devices',
                                     'utf-8'),
                                     server_address)
 
@@ -892,7 +906,7 @@ class HTPA_UDPReader():
         
         # Add socket to dictionary
         dev_id = dev_info.index.item()
-        # udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
         self.sockets = {dev_id:udp_socket}
         
         # Append new device to device list and store
