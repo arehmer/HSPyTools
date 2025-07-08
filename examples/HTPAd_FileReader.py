@@ -6,18 +6,22 @@ Created on Fri Feb  2 15:56:46 2024
 """
 
 from hspytools.readers import HTPAdGUI_FileReader
+from hspytools.tparray import TPArray, SensorTypes
+
 
 from pathlib import Path
 
 # %% path to file as Path object
-file_path = Path.cwd() / 'data_samples' / '32x32L2k1.BDS'
+file_path = Path.cwd() / 'data_samples' / '60x40L1k9.BDS'
 
-# %% Parameters
-width = 32
-height = 32
+# %% All implemented sensor types are in the dictionary SensorTypes
+print(SensorTypes.keys())
 
-# %% Initialize File Reader
-reader = HTPAdGUI_FileReader(width,height)
+#%% Initialize a TPArray instance providing the proper Sensor Type
+tparray = TPArray(SensorType = SensorTypes['HTPA60x40D_L1K9_0K8'])
+
+# %% Initialize File Reader using the TPArray instance
+reader = HTPAdGUI_FileReader(tparray)
 
 # %% Read in bds as pandas DataFrame using read_htpa_video() method
 # read_htpa_video() returns the content of the bds as dataframe as well as
@@ -26,16 +30,9 @@ df,header = reader.read_htpa_video(file_path)
 
 
 # %% How to access data in the DataFrame?
-# HTPAdGUI_FileReader has an attribute tparray, that among other information
-# contains all the column headers of the dataframe
-tparray = reader.tparray
 
-# Alternatively one can initialize a new TParray object:
-from hspytools.tparray import TPArray
-tparray = TPArray(width,height)
-
-# %% Access pixels (all frames):
-pixel_values = df[tparray._pix]
+# tparray._pix returns all columns that contain pixel values
+df_pixel = df[tparray._pix]
 
 
 # %% Get a single frame (frame 10)
@@ -43,7 +40,7 @@ frame10 = df.loc[10,tparray._pix]
 
 # %% Plot frame
 import matplotlib.pyplot as plt
-frame10_np = frame10.values.reshape((width,height))
+frame10_np = frame10.values.reshape(tparray._npsize)
 
 plt.figure('Frame 10')
 plt.imshow(frame10_np)
