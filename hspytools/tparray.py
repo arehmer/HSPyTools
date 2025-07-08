@@ -16,6 +16,8 @@ import warnings
 SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
                'HTPA120x84DR2_L3K95_0K8':1,
                'HTPA160x120DR1_L3K95_0K8':2,
+               'HTPA8x8DR1_L0K8_0K8':3,
+               'HTPA32x32dR2_L1k9_0k8':4,
                'SENSOR_TYPE_NONE' : 99}
 
 
@@ -38,6 +40,13 @@ class TPArray():
         elif (self.SensorType == SensorTypes['HTPA160x120DR1_L3K95_0K8']):
             self._width = 160
             self._height = 120
+        elif (self.SensorType == SensorTypes['HTPA8x8DR1_L0K8_0K8']):
+            self._width = 8
+            self._height = 8
+        elif (self.SensorType == SensorTypes['HTPA32x32dR2_L1k9_0k8']):
+            self._width = 32
+            self._height = 32
+            self._NETD = 60 # Tuned on Archesens-Data
         elif self.SensorType is None:
             self._width = attr_dict.pop('width',None)
             self._height = attr_dict.pop('height',None)
@@ -98,7 +107,6 @@ class TPArray():
             self._package_num = 2
             self._package_size = 1292
             self._fs = 27
-            self._NETD = 140
             self.Pitch = 90.0e-6
             self.Ampl = 40            
             
@@ -763,8 +771,8 @@ class TPArray():
     
     def rawmeas_comp(self,df_meas:pd.DataFrame,**kwargs):
         """
-        Copy from Calc_CompTemp.py, no compensation of pixel sensitivity and
-        no conversion in dK
+        Copy from Calc_CompTemp.py, only application of calibration, 
+        no conversion to dK
         """
         
         # Apply pixel constants for sensitivity compensation?
