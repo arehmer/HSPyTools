@@ -10,6 +10,7 @@ import h5py
 import numpy as np
 import warnings
 import os
+import inspect
 
 from hspytools.readers import HTPAdGUI_FileReader
 from hspytools.tparray import TPArray
@@ -65,7 +66,7 @@ class hdf5_mgr():
         if is_empty:
             self.width = kwargs.pop('width',0)
             self.height = kwargs.pop('height',0)
-            self.hdf5Index_dtypes = kwargs.pop('_hdf5Index_dtypes',{})
+            self.hdf5Index_dtypes = kwargs.pop('hdf5Index_dtypes',{})
             
             # Also create an empty DataFrame which will serve as a ledger 
             # of the files content
@@ -98,14 +99,39 @@ class hdf5_mgr():
                 setattr(self,attr,attr_dict[attr])
     
     @property
+    def hdf5_path(self):
+        return self._hdf5_path
+    @hdf5_path.setter
+    def hdf5_path(self,path:Path):
+        if not isinstance(path,Path):
+            raise TypeError('Path must be povided as pathlib.Path!')
+        self._hdf5_path = path
+    
+    
+    
+    @property
     def hdf5Index_dtypes(self):
         return self._hdf5Index_dtypes
     @hdf5Index_dtypes.setter
     def hdf5Index_dtypes(self,dtypes:dict):
+        
+        # Check type
+        if not isinstance(dtypes,dict):
+            raise TypeError('dtypes must be provided as a dictionary!')
+        
+        # When read from the hdf5 file, strings are bytestrings. Convert
+        for key in dtypes.keys():
+            if isinstance(dtypes[key],str):
+                pass
+            elif isinstance(dtypes[key],bytes):
+                dtypes[key] = dtypes[key].decode('utf-8')
+            else:
+                raise TypeError(f'{key} datatype must be provided as str or  '+\
+                                'bytes but is provided as f{type(dtypes[key])}')
+                
         self._hdf5Index_dtypes = dtypes
         self._save_attributes_to_hdf5()        
     
-            
     def _save_attributes_to_hdf5(self):
         """
         Writes all attributes of the class to the "attributes" group in the
@@ -117,14 +143,20 @@ class hdf5_mgr():
 
         """
         
-        attr_dict = {attr: getattr(self,attr) for attr in self.__dict__.keys()}
+        props = {}
+        for name, val in inspect.getmembers(self.__class__):
+            if isinstance(val, property):
+                try:
+                    props[name] = getattr(self, name)
+                except Exception as e:
+                    props[name] = f"<error: {e}>"
         
         # Path does not need to be saved
-        attr_dict.pop('_hdf5_path')
+        props.pop('hdf5_path')
         
         # Write attributes of class to file
         with h5py.File(self._hdf5_path, 'a')  as h5file:
-            for attr_name, attr_val in attr_dict.items():
+            for attr_name, attr_val in props.items():
                 
                 # Check if attributes dataset already exists
                 if 'attributes' in h5file:
@@ -139,39 +171,6 @@ class hdf5_mgr():
                             value       
                 else:
                     h5file['attributes/' + attr_name] = attr_val
-
-
-    # def _write_dict_to_hdf5(self,target_group,dictionary):
-    #     """
-    #     Writes the contents of a dictionary to a group called 'types' in an HDF5 file.
-        
-    #     Args:
-            
-    #     """
-        
-    #     with h5py.File(self._hdf5_path, 'a') as hdf_file:
-    #         types_group = hdf_file.create_group(target_group)
-    #         for key, value in dictionary.items():
-    #             types_group.attrs[key] = value
-    
-    # def _read_dict_from_hdf5(self,target_group):
-    #     """
-    #     Reads the contents of the 'types' group in an HDF5 file into a dictionary.
-        
-    #     Args:
-    #         filename (str): Name of the HDF5 file to read from.
-        
-    #     Returns:
-    #         dict: Dictionary with string keys and string values.
-    #     """
-    #     dictionary = {}
-    #     with h5py.File(self._hdf5_path, 'r') as hdf_file:
-    #         types_group = hdf_file[target_group]
-    #         for key, value in types_group.attrs.items():
-    #             dictionary[key] = value
-                
-    #     return dictionary
-    
     
     def _initialize_index(self):
 
