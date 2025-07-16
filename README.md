@@ -33,7 +33,7 @@ The library was developed using the Anaconda3 distribution of Python 3.11.5. In 
    or using the GitHub Desktop-App: ```File-->Clone repository ``` <br>
    <img src="images/screenshot1_github_desktop.png"  height="300">
 
-   and then enter the URL ```https://github.com/arehmer/HSFit.git``` into the mask <br>
+   and then enter the URL ```https://github.com/arehmer/HSPyTools.git``` into the mask <br>
    <img src="images/screenshot2_github_desktop.png" height="200">
 
 ## Install HSPyTools
@@ -44,7 +44,7 @@ The library was developed using the Anaconda3 distribution of Python 3.11.5. In 
     ```
 4. Install HSFit in development mode with pip via
     ```sh
-    pip install -e \path\to\HSFit>
+    pip install -e \path\to\HSPyTools>
     ```
     The installation in devlopment mode makes sure, that changes to the repository are automatically reflected in the installed library. Therefore no new installation is necessary after pulling new commits.
 
