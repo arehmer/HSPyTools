@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 import struct
 
+from .LuT import LuT
+
 import warnings
 
 # This needs to be an exact copy of the enum from TPArray.hpp
@@ -311,31 +313,15 @@ class TPArray():
     def set_BCC(self,bcc):
         self._bcc = bcc
     
-    def import_LuT(self,lut_path):
-        
-        # Import Look up Table as pd.DataFrame
-        LuT = pd.read_csv(lut_path, sep=',',header=0,index_col = 0)
-        
-        # Convert column header to int
-        LuT.columns = np.array([int(c) for c in LuT.columns])
-        
-        # Load LuT from file
-        # df_lut = pd.read_csv(lut_path.absolute(),header=None,
-        #                      sep = '\t')
-        
-        # LuT = {}
-        
-        # LuT['ta'] = df_lut.loc[[0]].values[:,1:].astype(int).flatten()
-        # LuT['digits'] = df_lut.loc[1::,0].values.astype(int).flatten()
-        # LuT['to'] = df_lut.loc[1::].values[:,1::].astype(int)
-        
+    def import_LuT(self,LuT:LuT):
+       
         self._LuT = LuT
         
-        return LuT    
+        return None    
         
     def import_BCC(self,bcc_path):
         """
-        This is a copy of Read_BccData.py
+        This is a copy of Read_BccData.py by CK
         
 
         Parameters
@@ -417,7 +403,7 @@ class TPArray():
         
         self._checkBCC()
         
-        return bcc
+        return None
     
     def _checkBCC(self):
         """
@@ -807,6 +793,8 @@ class TPArray():
             # Convert back to DataFrame
             df_frame = pd.DataFrame(df_frame).transpose()
             df_calib.append(df_frame)
+            
+            print(f'Applied calibration to frame {i}')
         
         df_calib = pd.concat(df_calib)
         
@@ -842,6 +830,8 @@ class TPArray():
                     # print(pnt)
                     # raise Exception('Error converting the printed measurement')
                 df_frame[p] = int(pnt['To_LuT'].item()*10)
+                
+            print(f'Converted frame {i} to dK')
                 
             # Convert back to DataFrame
             df_frame = pd.DataFrame(df_frame).transpose()

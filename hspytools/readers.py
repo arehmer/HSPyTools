@@ -325,8 +325,8 @@ class HTPAdGUI_FileReader():
         df_video = df_video[pix_cols]
         
         # Limits for linear scaling
-        vmin = kwargs.pop('vmin',None)
-        vmax = kwargs.pop('vmax',None)
+        vmin_perc = kwargs.pop('vmin_perc',2)
+        vmax_perc = kwargs.pop('vmax_perc',98)
        
         if not path.exists():
             path.mkdir(parents=True,exist_ok=False)
@@ -337,18 +337,9 @@ class HTPAdGUI_FileReader():
             
             file_name = str(i) + '.png'
             
-            # If no limits for scaling are provided, vmin is the 2nd percentile
-            # and vmax the 98th percentile
-            
-            if vmin is None:
-                vmin_i = np.percentile(img, 2)
-            else:
-                vmin_i = vmin
-            
-            if vmax is None:
-                vmax_i = np.percentile(img, 98)
-            else:
-                vmax_i = vmax
+            # Calculate percentiles for sclaing the png
+            vmin_i = np.percentile(img, vmin_perc)
+            vmax_i = np.percentile(img, vmax_perc)
             
             matplotlib.image.imsave(path / file_name, img,
                                     vmin = vmin_i,

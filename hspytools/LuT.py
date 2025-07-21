@@ -161,7 +161,7 @@ class LuT:
         
         xlsx_path = kwargs.pop('xlsx_path',xlsx_standard)
         self.LuT_from_xlsx(xlsx_path,sheet_name,**kwargs)
-        print(sheet_name + 'successfully loaded.')
+        print(sheet_name + ' successfully loaded.')
         return None
         
     def inverse_eval_LuT(self,data:pd.DataFrame,
@@ -252,7 +252,7 @@ class LuT:
 
         Parameters
         ----------
-        data : pd.DataFrame. Contains ambient temperature in Ta_col in Kelvin
+        data : pd.DataFrame. Contains ambient temperature in Ta_col in dK
             and pixel voltage in digits in Ud_col
             DESCRIPTION.
         Ta_col : TYPE, optional
