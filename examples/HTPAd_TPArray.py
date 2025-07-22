@@ -24,6 +24,8 @@ print(SensorTypes.keys())
 
 #%% Initialize a TPArray instance providing the proper Sensor Type
 tparray = TPArray(SensorType = SensorTypes['HTPA60x40D_L1K9_0K8'])
+# tparray = TPArray(width = 60, height = 40)
+
 
 # %% Load the raw data you want to convert from raw digits to dK using the
 # HTPAdGUI_FileReader
@@ -76,3 +78,6 @@ frame10_dK = frame10_dK.values.reshape(tparray._npsize)
 
 plt.figure('Frame 10 dK')
 plt.imshow(frame10_dK)
+
+#%% Für Dennis
+dK_data.to_excel('ConvertedData.xlsx')
