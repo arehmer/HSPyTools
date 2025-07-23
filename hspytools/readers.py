@@ -19,6 +19,8 @@ import shutil
 
 import warnings
 
+import platform
+
 from .tparray import TPArray
 
 class HTPAdGUI_FileReader():
@@ -839,7 +841,8 @@ class HTPA_UDPReader():
         udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         
         # Bind socket (sometimes needed, sometimes breaks the code)
-        # udp_socket.bind(('0.0.0.0', self._port))
+        if platform.system() == "Linux":
+            udp_socket.bind(('0.0.0.0', self._port))
                  
         # Set timeout to 1 second
         udp_socket.settimeout(1)
