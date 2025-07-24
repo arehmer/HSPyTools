@@ -842,7 +842,7 @@ class HTPA_UDPReader():
         
         # Bind socket (sometimes needed, sometimes breaks the code)
         # if platform.system() == "Linux":
-        udp_socket.bind(('0.0.0.0', self._port))
+        #     udp_socket.bind(('0.0.0.0', self._port))
                  
         # Set timeout to 1 second
         udp_socket.settimeout(1)
