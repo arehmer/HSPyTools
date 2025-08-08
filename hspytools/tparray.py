@@ -20,6 +20,7 @@ SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
                'HTPA160x120DR1_L3K95_0K8':2,
                'HTPA8x8DR1_L0K8_0K8':3,
                'HTPA32x32dR2_L1k9_0k8':4,
+               'HTPA80x64dR2_L10k5_0k95_F7k7':5,
                'SENSOR_TYPE_NONE' : 99}
 
 
