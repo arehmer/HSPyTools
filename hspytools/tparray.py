@@ -21,6 +21,7 @@ SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
                'HTPA8x8DR1_L0K8_0K8':3,
                'HTPA32x32dR2_L1k9_0k8':4,
                'HTPA80x64dR2_L10k5_0k95_F7k7':5,
+               'HTPA32x32dR2_L1k7_0k8':6,
                'SENSOR_TYPE_NONE' : 99}
 
 
@@ -50,6 +51,10 @@ class TPArray():
             self._width = 32
             self._height = 32
             self._NETD = 60 # Tuned on Archesens-Data
+        elif (self.SensorType == SensorTypes['HTPA32x32dR2_L1k7_0k8']):
+            self._width = 32
+            self._height = 32
+            self._NETD = 152 # from datasheet   
         elif self.SensorType is None:
             self._width = attr_dict.pop('width',None)
             self._height = attr_dict.pop('height',None)
