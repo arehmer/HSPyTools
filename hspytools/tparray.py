@@ -460,7 +460,11 @@ class TPArray():
         elif dtype == 'int16':
             b_idx = np.arange(0,len(raw_val),2)
             conv_val = [struct.unpack('<h',raw_val[b:b+2])[0] for b in  b_idx] 
-
+            
+        elif dtype == 'uint32':
+            b_idx = np.arange(0, len(raw_val), 4)
+            conv_val = [struct.unpack('<I', raw_val[b:b+4])[0] for b in b_idx]
+            
         else:
             Exception('Unknown datatype')
             conv_val = None

@@ -72,7 +72,12 @@
 		"adr_start": "0x55",
 		"adr_stop": "0x56"},
 
-	"nodefpix":  {
+	"DeviceID":  {
+		"dtype": "uint32",
+		"adr_start": "0x74",
+		"adr_stop": "0x77"},
+
+	"NoDefPix":  {
 		"dtype": "uint8",
 		"adr_start": "0x7F",
 		"adr_stop": "0x7F"},
