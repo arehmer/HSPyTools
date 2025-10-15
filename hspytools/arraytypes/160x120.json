@@ -73,6 +73,11 @@
 		"adr_start": "0x55",
 		"adr_stop": "0x56"},
 
+	"nodefpix":  {
+		"dtype": "uint8",
+		"adr_start": "0x7F",
+		"adr_stop": "0x7F"},
+
 	"vddCompGrad": {
 		"dtype": "int16",
 		"adr_start": "0x2100",
