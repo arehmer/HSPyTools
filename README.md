@@ -1,7 +1,9 @@
 <picture align="center">
   <img alt="HSPy Logo)" src="images/HSPyLogo.png">
 </picture>
+
 -----------------
+
 # Installation
 
 The library was developed using the Anaconda3 distribution of Python 3.11.5. In the following instructions for the installation via conda as well as pip are provided.
