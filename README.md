@@ -1,5 +1,5 @@
 <picture align="center">
-  <source media="(prefers-color-scheme: dark)" src="images/HSPyLogo.png">
+  <img alt="HSPy Logo)" src="images/HSPyLogo.png">
 </picture>
 
 # Installation
