@@ -816,6 +816,9 @@ class TPArray():
         no conversion in dK
         """
         
+        if isinstance(df_meas,pd.Series):
+            df_meas = df_meas.to_frame().T
+        
         # Perform all compensation operations on data
         df_meas = self.rawmeas_comp(df_meas)
               

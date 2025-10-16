@@ -339,7 +339,7 @@ class HTPAdGUI_FileReader():
             
             file_name = str(i) + '.png'
             
-            # Calculate percentiles for sclaing the png
+            # Calculate percentiles for scaling the png
             vmin_i = np.percentile(img, vmin_perc)
             vmax_i = np.percentile(img, vmax_perc)
             

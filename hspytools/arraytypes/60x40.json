@@ -21,7 +21,7 @@
 		"dtype": "uint8",
 		"adr_start": "0x0D",
 		"adr_stop":  "0x0D"},
-
+			
 	"vddMeas_th1": {
 		"dtype": "uint16",
 		"adr_start": "0x26",
@@ -61,7 +61,7 @@
 		"dtype": "uint8",
 		"adr_start": "0x4F",
 		"adr_stop":  "0x4F"},
-		
+
 
 	"globalOff": {
 		"dtype": "int8",
@@ -82,7 +82,7 @@
 		"dtype": "int16",
 		"adr_start": "0x4400",
 		"adr_stop":  "0x47BF"},
-		
+
 
 	"thGrad": {
 		"dtype": "int16",

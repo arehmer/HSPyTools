@@ -17,20 +17,45 @@
 		"adr_start": "0x08",
 		"adr_stop":  "0x08"},
 
+	"Th1Scale": {
+		"dtype": "uint8",
+		"adr_start": "0x09",
+		"adr_stop":  "0x09"},
+
+	"Th2Scale": {
+		"dtype": "uint8",
+		"adr_start": "0x0A",
+		"adr_stop":  "0x0A"},
+
 	"epsilon": {
 		"dtype": "uint8",
 		"adr_start": "0x0D",
 		"adr_stop":  "0x0D"},
 
-	"vddMeas_th1": {
+	"avgVDD_ThCalib_@(Ta1,Vdd2)": {
 		"dtype": "uint16",
 		"adr_start": "0x26",
 		"adr_stop":  "0x27"},
 
-	"vddMeas_th2": {
+	"avgVDD_ThCalib_@(Ta2,Vdd2)": {
 		"dtype": "uint16",
 		"adr_start": "0x28",
 		"adr_stop":  "0x29"},
+
+	"avgVDD_ThCalib_@(Ta1,Vdd1)": {
+		"dtype": "uint16",
+		"adr_start": "0x2A",
+		"adr_stop":  "0x2B"},
+
+	"TrayTemp_ThCalib_@(Ta1,Vdd2)": {
+		"dtype": "uint16",
+		"adr_start": "0x2C",
+		"adr_stop":  "0x2D"},
+
+	"TrayTemp_ThCalib_@(Ta2,Vdd2)": {
+		"dtype": "uint16",
+		"adr_start": "0x2E",
+		"adr_stop":  "0x2F"},
 
 	"ptatGrad": {
 		"dtype": "float32",
@@ -42,12 +67,12 @@
 		"adr_start": "0x38",
 		"adr_stop":  "0x3B"},
 
-	"ptat_th1": {
+	"avgPTAT_ThCalib_@(Ta1,Vdd2)": {
 		"dtype": "uint16",
 		"adr_start": "0x3C",
 		"adr_stop":  "0x3D"},
 
-	"ptat_th2": {
+	"avgPTAT_ThCalib_@(Ta2,Vdd2)": {
 		"dtype": "uint16",
 		"adr_start": "0x3E",
 		"adr_stop":  "0x3F"},
@@ -61,7 +86,7 @@
 		"dtype": "uint8",
 		"adr_start": "0x4F",
 		"adr_stop":  "0x4F"},
-		
+
 
 	"globalOff": {
 		"dtype": "int8",
@@ -73,6 +98,46 @@
 		"adr_start": "0x55",
 		"adr_stop": "0x56"},
 
+	"Vdd1Scale": {
+		"dtype": "uint8",
+		"adr_start": "0x5E",
+		"adr_stop": "0x5E"},
+
+	"Vdd2Scale": {
+		"dtype": "uint8",
+		"adr_start": "0x5F",
+		"adr_stop": "0x5F"},
+
+	"vddMeas_Ta2_Vdd1": {
+		"dtype": "uint16",
+		"adr_start": "0x6D",
+		"adr_stop":  "0x6E"},
+
+	"TrayTemp_PTATCalib_@(Ta1,Vdd1)": {
+		"dtype": "uint16",
+		"adr_start": "0x69",
+		"adr_stop":  "0x6A"},
+
+	"TrayTemp_PTATCalib_@(Ta2,Vdd1)": {
+		"dtype": "uint16",
+		"adr_start": "0x6B",
+		"adr_stop":  "0x6C"},
+
+	"avgVDD_ThCalib_@(Ta2,Vdd1)":  {
+		"dtype": "uint16",
+		"adr_start": "0x6D",
+		"adr_stop":  "0x6E"},
+
+	"avgPTAT_PTATCalib_@(Ta1,Vdd1)": {
+		"dtype": "uint16",
+		"adr_start": "0x79",
+		"adr_stop":  "0x7A"},
+
+	"avgPTAT_PTATCalib_@(Ta2,Vdd1)": {
+		"dtype": "uint16",
+		"adr_start": "0x7B",
+		"adr_stop":  "0x7C"},
+
 	"vddCompGrad": {
 		"dtype": "int16",
 		"adr_start": "0x340",
@@ -82,7 +147,6 @@
 		"dtype": "int16",
 		"adr_start": "0x540",
 		"adr_stop":  "0x73F"},
-		
 
 	"thGrad": {
 		"dtype": "int16",
