@@ -4,6 +4,12 @@
 
 -----------------
 
+# HSPy: Python Integration for Heimann Sensor Thermopiles
+HSPy is a Python library that provides customers with a seamless way to integrate Heimann Sensor hardware and software into their Python applications. It offers a range of tools for:
+Live streaming, recording, and visualization of sensor data from our Appsets
+Converting sensor data recorded with ArraySoft into NumPy arrays or pandas DataFrames for further analysis
+With HSPyTools, developers can easily access, process, and analyze data from our systems directly within their Python workflows.
+
 # Installation
 
 The library was developed using the Anaconda3 distribution of Python 3.11.5. In the following instructions for the installation via conda as well as pip are provided.
