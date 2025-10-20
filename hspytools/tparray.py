@@ -9,6 +9,7 @@ import pandas as pd
 import json
 from pathlib import Path
 import struct
+import time
 
 from .LuT import LuT
 
@@ -352,19 +353,18 @@ class TPArray():
         ########################################
         
         # read hex data in bit by bit
-        with open(bcc_path,'rb') as bcc_file:
-            bcc_raw = bcc_file.read() 
+        bcc_raw = self._stable_read(bcc_path)
         
         # Read and convert data according to provided json file
         for key in ee.keys():
-            
+
             # Ge start and stop indices from addresses
             idx_start = int(ee[key]['adr_start'],0)
             idx_stop = int(ee[key]['adr_stop'],0)+1
             
             # Get raw value
             raw_val = bcc_raw[idx_start:idx_stop]
-            
+                        
             # Convert raw value 
             bcc[key] = self._convert_raw_bcc(raw_val,ee[key]['dtype'])
 
@@ -372,13 +372,14 @@ class TPArray():
         # Convert all EEPROM values from lists to numpy array
         for key in bcc.keys():
             bcc[key] = np.array(bcc[key]) 
+
         
         # Convert all arrays to appropriate shape and flip them
         # properly
         bcc['pij'] = np.array(bcc['pij']).reshape(self._npsize)
         bcc['thGrad'] = np.array(bcc['thGrad']).reshape(self._npsize)
         bcc['thOff'] = np.array(bcc['thOff']).reshape(self._npsize)
-                
+        
         # Only 8x8 Arrays don't have vdd calibration data and pij, thGrad and 
         # thOff are not flipped
         if not (self.width,self.height) == (8,8):
@@ -405,13 +406,13 @@ class TPArray():
             bcc['vddCompOff'][int(vdd_size[0]/2):,::] = \
                 np.flipud(bcc['vddCompOff'][int(vdd_size[0]/2):,::])
         
-        self._bcc = bcc 
-        
-        self._checkBCC()
+        self._bcc = bcc
+
+        self._checkBCC(bcc)
         
         return None
     
-    def _checkBCC(self):
+    def _checkBCC(self,bcc):
         """
         Performs a sanity check on the imported BCC. Mostly standard values
         are checked for and a warning issued to the user if found
@@ -421,15 +422,34 @@ class TPArray():
         None.
 
         """
-        
+        # print('after: ' + str(bcc['pij'][0,0]))
         type_max = {'uint16':65535}
         
         # Check if pixel constants are on standard value
-        pij = self._bcc['pij']
+        pij = bcc['pij']
         
-        if (pij == 65535).all():
+        if (pij == type_max['uint16']).all():
             warnings.warn('Pixel constants have not yet been set for this device!')
 
+    def _stable_read(self, path, timeout=2.0, interval=0.15):
+        # path = Path(path)
+        end = time.monotonic() + timeout
+        prev = None
+        while True:
+            with open(path, "rb") as f:
+                data1 = f.read()
+                
+            time.sleep(interval)  # tiny pause
+            
+            with open(path, "rb") as f:
+                data2 = f.read()
+                                
+            if data1 == data2:           # stable content, not just stable size
+                return data2
+    
+            if time.monotonic() >= end:
+                # last attempt; surface the issue
+                raise TimeoutError("File content didn't stabilize within timeout.")
 
     def _convert_raw_bcc(self,raw_val:list,dtype:str):
         """
