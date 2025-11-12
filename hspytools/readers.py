@@ -23,16 +23,13 @@ import platform
 
 from .tparray import TPArray
 
+
 class HTPAdGUI_FileReader():
     
-    def __init__(self,tparray:TPArray):
+    def __init__(self,tparray = None):
         
         self.tparray = tparray
-        
-        # For convenience
-        self.width = tparray.width
-        self.height = tparray.height
-        
+       
                 
     def read_htpa_video(self,path):
         
@@ -65,6 +62,8 @@ class HTPAdGUI_FileReader():
         
         # Get columns names
         columns = self.tparray.get_serial_data_order()
+        
+        raise Exception('Header must be read in here to extract ArrayType!!')
         
         # Read txt with pandas to DataFrame
         txt_content = pd.read_csv(path,
@@ -105,8 +104,13 @@ class HTPAdGUI_FileReader():
             
             # Join bytes of header together
             header = bytes().join(header)
-
+            
+            # Get ArrayType
+            arraytype = self._get_header_info(header)['ArrayType']
                 
+            # Set tparray attribute
+            self.tparray = TPArray(ArrayType = arraytype)
+            
             # Read two bytes at a time 
             while (LSb := f.read(2)):
                 
@@ -129,7 +133,17 @@ class HTPAdGUI_FileReader():
         bds_content.index.name = 'image_id'
         
         return bds_content, header
+
+    def _get_header_info(self,header:bytes):
         
+        header_str = str(header)
+        
+        # Get ArrayType
+        match = re.search(r"(?<=ARRAYTYPE=)\d+", header_str)
+        arraytype = int(match.group())
+        
+        return {'ArrayType':arraytype}
+
     def reverse(self,df_video):
         """
         Function for rotating a video by 180°. Intended for postprocessing 

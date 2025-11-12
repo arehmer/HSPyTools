@@ -25,6 +25,27 @@ SensorTypes = {'HTPA60x40D_L1K9_0K8':0,
                'HTPA32x32dR2_L1k7_0k8':6,
                'SENSOR_TYPE_NONE' : 99}
 
+ArrayTypes = {'HTPA8x8' : 0,
+              'HTPA16x16' : 1,
+              'HTPA32x16' : 2,
+              'HTPA32x31' : 3,
+              'Zeile64' : 4,
+              'HTPA64x62' : 5,
+              'HTPA16x4' : 6,
+              'HID' : 7,
+              'HTPA106x52' : 8,
+              'HTPA82x62' : 9,
+              'HTPA32x32d' : 10,
+              'HTPA80x64d'	: 11,
+              'HTPA120x84d' : 12,
+              'HTPA84x60d' :	13,
+              'HTPA60x40d'	: 14,
+              'HTPA160x120d' :	15,
+              'HTPA120x84dR2' : 16,
+              'HTPA16x16dR3' : 17,
+              'HTPA160x120dR1' : 18,
+              'HTPA80x60d' : 19,
+              'HTPA60x40dr2' : 20}
 
 class TPArray():
     """
@@ -35,6 +56,56 @@ class TPArray():
     def __init__(self,**attr_dict):
         
         self._SensorType = attr_dict.pop('SensorType',None)
+        self._ArrayType = attr_dict.pop('ArrayType',None)
+        
+        if self._SensorType is not None:
+            self._init_by_SensorType()
+        elif self._ArrayType is not None:
+            self._init_by_ArrayType()
+        else:
+            raise Exception('Provide either SensorType or ArrayType!')
+        
+        
+        # Init basic attributes and DevConst by resolution
+        self._init_DevConst()
+
+
+    @property
+    def SensorType(self):
+        return self._SensorType
+    @SensorType.setter
+    def SensorType(self,sensorType:int):
+        self._SensorType = sensorType
+        
+    @property
+    def ArrayType(self):
+        return self._ArrayType
+    @ArrayType.setter
+    def ArrayType(self,ArrayType:int):
+        self._ArrayType = ArrayType
+        
+    @property
+    def width(self):
+        return self._width
+    @width.setter
+    def width(self,w):
+        self._width = w
+    
+    @property
+    def height(self):
+        return self._height
+    @height.setter
+    def height(self,h):
+        self._height = h
+        
+    @property
+    def BCC(self):
+        return self._BCC
+    @BCC.setter
+    def BCC(self,BCC):
+        self._BCC = BCC
+
+    def _init_by_SensorType(self):
         
         if (self.SensorType == SensorTypes['HTPA60x40D_L1K9_0K8']):
             self._width = 60
@@ -57,12 +128,60 @@ class TPArray():
             self._height = 32
             self._NETD = 152 # from datasheet   
         elif self.SensorType is None:
-            self._width = attr_dict.pop('width',None)
-            self._height = attr_dict.pop('height',None)
+            self._width = None
+            self._height = None
         else:
             raise Exception('SensorType not known!')
+            
+    def _init_by_ArrayType(self):
         
-        # Basic attributes
+        if (self.ArrayType == ArrayTypes['HTPA8x8']):
+            self._width = 8
+            self._height = 8
+        elif (self.ArrayType == ArrayTypes['HTPA16x16']):
+            self._width = 16
+            self._height = 16
+        elif (self.ArrayType == ArrayTypes['HTPA32x32d']):
+            self._width = 32
+            self._height = 32
+        elif (self.ArrayType == ArrayTypes['HTPA80x64d']):
+            self._width = 80
+            self._height = 64
+        elif (self.ArrayType == ArrayTypes['HTPA120x84d']):
+            self._width = 120
+            self._height = 84
+        elif (self.ArrayType == ArrayTypes['HTPA84x60d']):
+            self._width = 84
+            self._height = 60
+        elif (self.ArrayType == ArrayTypes['HTPA60x40d']):
+            self._width = 60
+            self._height = 40
+        elif (self.ArrayType == ArrayTypes['HTPA160x120d']):
+            self._width = 160
+            self._height = 120
+        elif (self.ArrayType == ArrayTypes['HTPA120x84dR2']):
+            self._width = 120
+            self._height = 84
+        elif (self.ArrayType == ArrayTypes['HTPA16x16dR3']):
+            self._width = 16
+            self._height = 16
+        elif (self.ArrayType == ArrayTypes['HTPA160x120dR1']):
+            self._width = 160
+            self._height = 120
+        elif (self.ArrayType == ArrayTypes['HTPA80x60d']):
+            self._width = 80
+            self._height = 60
+        elif (self.ArrayType == ArrayTypes['HTPA60x40dr2']):
+            self._width = 60
+            self._height = 40  
+        elif self.ArrayType is None:
+            self._width = None
+            self._height = None
+        else:
+            raise Exception('ArrayType not known!')
+
+    def _init_DevConst(self):
+        
         self._size = (self.width,self.height)
         self._npsize = (self.height,self.width)
         
@@ -275,29 +394,7 @@ class TPArray():
         self._ATC = ATC
         
         self._serial_data_order = pix + e_off + vdd + T_amb + PTAT + ATC
-
-    @property
-    def SensorType(self):
-        return self._SensorType
-    @SensorType.setter
-    def SensorType(self,sensorType:int):
-        self._SensorType = sensorType
         
-    @property
-    def width(self):
-        return self._width
-    @width.setter
-    def width(self,w):
-        self._width = w
-    
-    @property
-    def height(self):
-        return self._height
-    @height.setter
-    def height(self,h):
-        self._height = h
-
-       
     def _load_calib_json(self, path:Path):
         
         with open(path,'r') as file:
@@ -316,9 +413,6 @@ class TPArray():
     
     def set_LuT(self,LuT):
         self._LuT = LuT
-
-    def set_BCC(self,bcc):
-        self._bcc = bcc
     
     def import_LuT(self,LuT:LuT):
        
@@ -406,11 +500,11 @@ class TPArray():
             bcc['vddCompOff'][int(vdd_size[0]/2):,::] = \
                 np.flipud(bcc['vddCompOff'][int(vdd_size[0]/2):,::])
         
-        self._bcc = bcc
+        self.BCC = bcc
 
         self._checkBCC(bcc)
         
-        return None
+        return bcc
     
     def _checkBCC(self,bcc):
         """
@@ -689,8 +783,8 @@ class TPArray():
         
         
         
-        ptat_grad = self._bcc['ptatGrad']
-        ptat_off = self._bcc['ptatOffset']
+        ptat_grad = self.BCC['ptatGrad']
+        ptat_off = self.BCC['ptatOffset']
         
         Tamb0 = ptat_av*ptat_grad+ptat_off
         
