@@ -68,6 +68,9 @@ class TPArray():
         
         # Init basic attributes and DevConst by resolution
         self._init_DevConst()
+        
+        # Init reamining properties, otherwise save() method will fail
+        self.BCC = attr_dict.pop('BCC',None)
 
 
     @property

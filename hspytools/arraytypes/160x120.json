@@ -22,6 +22,26 @@
 		"adr_start": "0x0D",
 		"adr_stop":  "0x0D"},
 
+	"Arraytype": {
+		"dtype": "uint8",
+		"adr_start": "0x22",
+		"adr_stop":  "0x22"},	
+
+	"MBit(PixC)": {
+		"dtype": "uint8",
+		"adr_start": "0x1A",
+		"adr_stop":  "0x1A"},		
+		
+	"Bias_L(PixC)": {
+		"dtype": "uint8",
+		"adr_start": "0x1B",
+		"adr_stop":  "0x1B"},
+		
+	"Bias_R(PixC)": {
+		"dtype": "uint8",
+		"adr_start": "0x1D",
+		"adr_stop":  "0x1D"},	
+		
 	"vddMeas_th1": {
 		"dtype": "uint16",
 		"adr_start": "0x26",
@@ -72,6 +92,11 @@
 		"dtype": "uint16",
 		"adr_start": "0x55",
 		"adr_stop": "0x56"},
+
+	"DeviceID":  {
+		"dtype": "uint32",
+		"adr_start": "0x74",
+		"adr_stop": "0x77"},
 
 	"nodefpix":  {
 		"dtype": "uint8",
