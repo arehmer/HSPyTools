@@ -432,8 +432,8 @@ class HTPAdGUI_FileReader():
     
     def _flip(self,df_video):
 
-        w = self.width
-        h = self.height
+        w = self.tparray.width
+        h = self.tparray.height
         
         pix_cols = self.tparray._pix
         
@@ -447,13 +447,13 @@ class HTPAdGUI_FileReader():
                
  
 class HTPA_ByteStream_Converter():
-    def __init__(self,width,height,**kwargs):
+    def __init__(self,SensorType,**kwargs):
+
         
-        self.width = width
-        self.height = height
+        self.tparray = TPArray(SensorType = SensorType)
         
-        self.tparray = TPArray(width = width,
-                               height = height)
+        self.width = self.tparray.width
+        self.height = self.tparray.height
         
         # Initialize an array to which to write data
         self.data_cols = self.tparray.get_serial_data_order()
@@ -525,10 +525,9 @@ class HTPA_ByteStream_Converter():
     
 class HTPA_UDPReader():
     
-    def __init__(self,width,height,**kwargs):
+    def __init__(self,SensorType,**kwargs):
         
-        self.width = width
-        self.height = height
+
                
         ###### Set UDP options ################################################
         self._port = kwargs.pop('port',30444)
@@ -536,8 +535,10 @@ class HTPA_UDPReader():
         
         # Initialize a TPArray object, which contains all information regarding
         # how data is stored, organized and transmitted for this array type
-        self._tparray = TPArray(width = width,
-                                height = height)
+        self._tparray = TPArray(SensorType = SensorType)
+        
+        self.width = self._tparray.width
+        self.height = self._tparray.height
         
         # Create a DataFrame to store all bound devices in
         self.col_dict = {'IP':str,'MAC-ID':str,'Arraytype':int,
@@ -553,7 +554,7 @@ class HTPA_UDPReader():
         # Initialize ByteStream Reader for convertings bytes to pandas
         # dataframes
         self.bytestream_converter = \
-            HTPA_ByteStream_Converter(width,height,**kwargs)
+            HTPA_ByteStream_Converter(SensorType=SensorType,**kwargs)
         
         # depending on the desired output type, choose which method of
         # HTPA_ByteStream_Reader should be used to parse bytes to that 
@@ -662,7 +663,7 @@ class HTPA_UDPReader():
             sock.settimeout(RESPONSE_TIMEOUT)
             
             # Send call message
-            # print("Calling HTPA devices...")
+            print("Calling HTPA devices...")
             sock.sendto(self._call_message, (BROADCAST_ADDRESS, self._port))
                         
             # Listen for responses
@@ -699,6 +700,8 @@ class HTPA_UDPReader():
         if len(self.devices)!=0:
             print('Devices found:\n')
             print(self.devices)
+        else:
+            print('No devices found.')
         
         return devices
     
