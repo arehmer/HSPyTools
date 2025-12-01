@@ -143,13 +143,19 @@ class Imshow(RThread):
     """
     
     def __init__(self,
-                 width:int,
-                 height:int,
                  read_buffer:Queue,
                  read_condition:Condition,
+                 ArrayType:int = None,
+                 SensorType:int = None,
                  **kwargs):
         
-        self.tparray = TPArray(width = width, height = height)
+        if ArrayType is None and SensorType is not None:
+            self.tparray = TPArray(SensorType = SensorType)
+        elif ArrayType is not None and SensorType is None:
+            self.tparray = TPArray(ArrayType = ArrayType)
+        else:
+            raise Exception('Either ArrayType or SensorType must be provided.')
+            
         self.num_pix = len(self.tparray._pix)
         
         self.window_name = kwargs.pop('window_name','Sensor stream')
@@ -189,11 +195,13 @@ class Imshow(RThread):
             
             # Save to dict
             result['frame_plot'] = frame 
-        
+            
         else:
             # If upstream thread failed, set success flag to False
             result['success'] = False
-        
+            
+            print('here')
+            
         return result
     
     def run(self):

@@ -447,10 +447,10 @@ class HTPAdGUI_FileReader():
                
  
 class HTPA_ByteStream_Converter():
-    def __init__(self,SensorType,**kwargs):
+    def __init__(self,ArrayType,**kwargs):
 
         
-        self.tparray = TPArray(SensorType = SensorType)
+        self.tparray = TPArray(ArrayType = ArrayType)
         
         self.width = self.tparray.width
         self.height = self.tparray.height
@@ -525,20 +525,14 @@ class HTPA_ByteStream_Converter():
     
 class HTPA_UDPReader():
     
-    def __init__(self,SensorType,**kwargs):
+    def __init__(self,ArrayType=None,**kwargs):
         
-
+        # Set attributes
+        self.ArrayType = ArrayType
                
         ###### Set UDP options ################################################
         self._port = kwargs.pop('port',30444)
         self._call_message = bytes('Calling HTPA series devices','utf-8')
-        
-        # Initialize a TPArray object, which contains all information regarding
-        # how data is stored, organized and transmitted for this array type
-        self._tparray = TPArray(SensorType = SensorType)
-        
-        self.width = self._tparray.width
-        self.height = self._tparray.height
         
         # Create a DataFrame to store all bound devices in
         self.col_dict = {'IP':str,'MAC-ID':str,'Arraytype':int,
@@ -550,22 +544,20 @@ class HTPA_UDPReader():
         
         # Dictionary for storing all sockets in
         self._sockets = {}
-    
-        # Initialize ByteStream Reader for convertings bytes to pandas
-        # dataframes
-        self.bytestream_converter = \
-            HTPA_ByteStream_Converter(SensorType=SensorType,**kwargs)
-        
-        # depending on the desired output type, choose which method of
-        # HTPA_ByteStream_Reader should be used to parse bytes to that 
-        # type
-        
-        # if self.output == 'np':
-        #     self.bytes_to_output = self.bytestream_reader.bytes_to_np
-        # if self.output == 'pd':
-        #     self.bytes_to_output = self.bytestream_reader.bytes_to_pd
             
-        
+    @property
+    def ArrayType(self):
+        return self._ArrayType
+    @ArrayType.setter
+    def ArrayType(self,ArrayType):
+            
+        # If the SensorType is given, initialize all attirbutes that
+        # depend on knowing the sensor type
+        if ArrayType is not None:
+            self._initDevSpecificAttr(ArrayType)
+                
+        self._ArrayType = ArrayType
+    
     @property
     def output(self):
         return self._output    
@@ -595,8 +587,6 @@ class HTPA_UDPReader():
         else:
             self._devices = pd.concat([devices_old,df])
             
-        
-        
 
     @property
     def sockets(self):
@@ -605,6 +595,15 @@ class HTPA_UDPReader():
     def sockets(self,socket:dict):
         self._sockets.update(socket)
 
+    def _initDevSpecificAttr(self,ArrayType):
+        
+        # Initialize a TPArray object, which contains all information regarding
+        # how data is stored, organized and transmitted for this array type
+        self._tparray = TPArray(ArrayType = ArrayType)
+        
+        self.width = self._tparray.width
+        self.height = self._tparray.height
+        
    
     def _read_port(self,udp_socket,server_address):
         """
@@ -703,7 +702,7 @@ class HTPA_UDPReader():
         else:
             print('No devices found.')
         
-        return devices
+        return self.devices
     
     def bind_tparray(self,IP:str='',DevID:int=-1):
         """
@@ -1039,6 +1038,11 @@ class HTPA_UDPReader():
         # Get device information from the device list
         dev_info = self.devices.loc[[dev_id]]
         
+        # Initialize ByteStream Reader for convertings bytes to pandas
+        # dataframes
+        bytestream_converter = \
+            HTPA_ByteStream_Converter(ArrayType=self.ArrayType)
+        
         # If more than one device has the same device id, return error
         if len(dev_info) != 1:
             Exception('Multiple devices have the same device id.')
@@ -1114,7 +1118,7 @@ class HTPA_UDPReader():
                 # bytes into an np.ndarray or pd.DataFrame
                 # df_frame = self.bytestream_reader.bytes_to_df(packages)
                 
-                frame = self.bytestream_converter.convert(packages)
+                frame = bytestream_converter.convert(packages)
                 
                 success = True
                 
@@ -1170,63 +1174,63 @@ class HTPA_UDPReader():
         
     #     return frame
     
-    def _receive_udp_frame(self,udp_socket):
-        """
-        Receives UDP packages and tries to put them together to a frame
+    # def _receive_udp_frame(self,udp_socket):
+    #     """
+    #     Receives UDP packages and tries to put them together to a frame
 
-        Parameters
-        ----------
-        udp_socket : TYPE
-            DESCRIPTION.
+    #     Parameters
+    #     ----------
+    #     udp_socket : TYPE
+    #         DESCRIPTION.
 
-        Returns
-        -------
-        None.
+    #     Returns
+    #     -------
+    #     None.
 
-        """
+    #     """
         
-        # Initialize list for received packages            
-        packages = []
+    #     # Initialize list for received packages            
+    #     packages = []
         
-        # Read incoming packages until one with the package index 1 is received
-        sync = False
+    #     # Read incoming packages until one with the package index 1 is received
+    #     sync = False
         
-        while sync == False:
+    #     while sync == False:
             
-            # Receive package
-            package = udp_socket.recv(self.tparray._package_size)
+    #         # Receive package
+    #         package = udp_socket.recv(self.tparray._package_size)
             
-            # Get index of package
-            package_index = int(package[0])
+    #         # Get index of package
+    #         package_index = int(package[0])
             
-            # Check if it is equal to 1
-            if package_index == 1:
-                packages.append(package)
-                sync = True
+    #         # Check if it is equal to 1
+    #         if package_index == 1:
+    #             packages.append(package)
+    #             sync = True
         
-        for p in range(2,self.tparray._package_num+1):
+    #     for p in range(2,self.tparray._package_num+1):
             
-            # Receive package
-            package = udp_socket.recv(self.tparray._package_size)
+    #         # Receive package
+    #         package = udp_socket.recv(self.tparray._package_size)
             
-            # Get index of package
-            package_index = int(package[0])
+    #         # Get index of package
+    #         package_index = int(package[0])
             
-            # Check if package index has the expected value
-            if package_index == p:
-                packages.append(package)
+    #         # Check if package index has the expected value
+    #         if package_index == p:
+    #             packages.append(package)
                 
-        # In the end check if as many packages were received as expected
-        if len(packages) == self.tparray._package_num:
+    #     # In the end check if as many packages were received as expected
+    #     if len(packages) == self.tparray._package_num:
                             
-            frame = self.bytestream_converter.convert(packages)
+    #         frame = self.bytestream_converter.convert(packages)
                         
-        else:
-            print('Frame lost.')
-            frame = None
+    #     else:
+    #         print('Frame lost.')
+    #         frame = None
 
 
-        return frame
+    #     return frame
         
     
     def device_put_to_sleep(self,dev_id,**kwargs):
