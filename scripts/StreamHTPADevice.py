@@ -66,6 +66,7 @@ arg_parser.add_argument("--bcast",
 args = arg_parser.parse_args()
 bcast_addr = args.bcast
 
+# %% Main loop
 if __name__ == '__main__':
     
     # %% Create instance of UDP reader
