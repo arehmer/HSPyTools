@@ -18,11 +18,11 @@ Usage Examples
 
 
 Windows PowerShell:
-python .\htpa_run.py --bcast 192.168.178.255
+python ./StreamHTPADevice.py --bcast 192.168.178.255
 
 
 Linux shell (bash):
-python ./htpa_run.py --bcast 192.168.178.255
+python ./StreamHTPADevice.py --bcast 192.168.178.255
 
 
 Command-line Arguments
@@ -75,9 +75,6 @@ if __name__ == '__main__':
     # %% Broadcast looking for devices
     devices = udp_reader.broadcast(bcast_addr)
     
-    # If devices have been found, let user pick one to bind to
-    if len(udp_reader.devices) != 0:
-        print('Enter the device number of the device to bind...')
     
     # Get user input on which device to bind
     while True:
