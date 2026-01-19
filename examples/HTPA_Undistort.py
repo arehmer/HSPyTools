@@ -21,11 +21,16 @@ img_dist = np.loadtxt(img_dist_path)
 
 #%% Init HTPA_Undistort
 pixel_pitch = 0.045 # mm
-undistorter = HTPA_Undistorter(pixel_pitch)
+w = 60              # pixel
+h = 40              # pixel
+undistorter = HTPA_Undistorter(w,h,pixel_pitch)
 
-# %% Provice path to grid distortion data
+# %% Provide path to grid distortion data
 GridDistortionData_path = Path.cwd() / 'data_samples' / 'ZemaxGridDistortion_HTPA60x40d_L1k4_0k9_UHiS.txt' 
 undistorter.import_GridDistortionData(GridDistortionData_path)
+
+# %% Visualize GridDistortionData
+undistorter.plot_GridDistortionData()
 
 # %% Estimate mapping to invert distortion
 map_x, map_y = undistorter.estimate_mapping()

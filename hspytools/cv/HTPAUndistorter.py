@@ -1,13 +1,17 @@
 import numpy as np
 import pandas as pd
 import cv2
+import matplotlib
+import matplotlib.pyplot as plt
 from scipy.interpolate import RegularGridInterpolator
 from pathlib import Path
 
 class HTPA_Undistorter:
     
-    def __init__(self, pixpitch):
+    def __init__(self, w, h, pixpitch):
         
+        self.w = w
+        self.h = h
         self.pixpitch = pixpitch
         self.GridDistortion = None
         
@@ -18,6 +22,22 @@ class HTPA_Undistorter:
     def pixpitch(self,pixpitch:float):
         self._pixpitch = pixpitch
         print(f'Pixel pitch set to {pixpitch} mm.')
+        
+    @property
+    def w(self):
+        return self._w
+    @w.setter
+    def w(self,w):
+        self._w = w
+        print(f'Width of thermopile array: {w} pixel.')
+    @property
+    def h(self):
+        return self._h    
+    @h.setter
+    def h(self,h):
+        self._h = h
+        print(f'Height of thermopile array: {h} pixel.')
+
 
     @property
     def GridDistortion(self):
@@ -77,7 +97,73 @@ class HTPA_Undistorter:
         # If everything is fine, assign imported data to attribute        
         self.GridDistortion = GridDistortionData
         
-    
+        # Plot the grid distortion data as well
+        self.plot_GridDistortionData()
+        
+    def plot_GridDistortionData(self):
+        
+        data = self.GridDistortion
+
+        # Get colormap
+        tab10 = plt.get_cmap('tab10')
+        
+        # Get first two colors
+        c0 = tab10(0)   # blue
+        c1 = tab10(1)   # orange
+        c3 = tab10(3)   # red
+        
+        # Create figure
+        fig, ax = plt.subplots(1,1,figsize = (10,6))
+        
+        # Plot ideal/undistorted pixel positions
+        data.plot.scatter(x = 'Predicted X',
+                          y = 'Predicted Y',
+                          ax = ax,
+                          grid = True,
+                          marker = 'o',
+                          edgecolors = c0,
+                          facecolors = 'none',
+                          c='none')
+
+        # Plot distorted pixel positions        
+        data.plot.scatter(x = 'Real X',
+                          y = 'Real Y',
+                          ax = ax,
+                          grid = True,
+                          marker = 'x',
+                          color=c1)
+        
+        # Plot dimension of thermopile array as rectangle
+        w_tp = self.w * self.pixpitch
+        h_tp = self.h * self.pixpitch
+        
+        xtl = -(1/2 + self.w/2) * self.pixpitch
+        ytl = -(1/2 + self.h/2) * self.pixpitch
+        
+        tp_array = matplotlib.patches.Rectangle((xtl,ytl),
+                                                w_tp,
+                                                h_tp,
+                                                lw = 2,
+                                                ls = '--',
+                                                fc = 'none',
+                                                ec = c3)
+        
+        ax.add_patch(tp_array)
+        
+        
+        # Axis labels
+        ax.set_xlabel('$X$ (in mm)')
+        ax.set_ylabel('$Y$ (in mm)')
+        
+        # Legend
+        ax.legend(['Predicted', 'Real', 'Thermopile Array'])
+        
+        # Title
+        ax.set_title('Undistorted (predicted) vs. distorted (real) pixel locations and spatial extent ot thermopile array')
+        
+        
+        return ax
+        
     def estimate_mapping(self):
         """
         Estimate mapping for OpenCVs remap() function from GridDistortionData
@@ -175,7 +261,6 @@ class HTPA_Undistorter:
         if not map_x.shape == map_y.shape:
             raise ValueError('map_x and map_y need to have the same shape!')
         
-       
         # Place distorted image in the center of a new array of the same
         # dimension as the undistorted image
         img_src = np.ones(map_x.shape)*fill
