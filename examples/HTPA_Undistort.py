@@ -14,10 +14,21 @@ from pathlib import Path
 
 plt.close('all')
 
-
 # %% Load and plot an image to undistort
 img_dist_path = Path.cwd() / 'data_samples' / '60x40d_L1k4_0k9_Distortion_TestImage.txt'
 img_dist = np.loadtxt(img_dist_path)
+
+vmin = img_dist.min()
+vmax = img_dist.max()  
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+fig.suptitle('Distorted Image')
+ax.imshow(img_dist,
+          vmin=vmin,
+          vmax=vmax)
+
+ax.set_axis_off()
 
 #%% Init HTPA_Undistort
 pixel_pitch = 0.045 # mm
@@ -28,9 +39,6 @@ undistorter = HTPA_Undistorter(w,h,pixel_pitch)
 # %% Provide path to grid distortion data
 GridDistortionData_path = Path.cwd() / 'data_samples' / 'ZemaxGridDistortion_HTPA60x40d_L1k4_0k9_UHiS.txt' 
 undistorter.import_GridDistortionData(GridDistortionData_path)
-
-# %% Visualize GridDistortionData
-undistorter.plot_GridDistortionData()
 
 # %% Estimate mapping to invert distortion
 map_x, map_y = undistorter.estimate_mapping()
