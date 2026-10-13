@@ -10,3 +10,4 @@ tables
 h5py
 opencv-python
 pyusb
+libusb-package
