@@ -445,6 +445,7 @@ class TPArray():
 
         elif self.ArrayType in [ArrayTypes['HTPA120x84d'],
                                 ArrayTypes['HTPA120x84dR2']]:
+            raise NotImplementedError('NROFPTAT missing!')
             self.DevConst['NROFATC']=0
             self.DevConst['NROFBLOCKS']=6
 
