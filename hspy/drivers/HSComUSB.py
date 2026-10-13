@@ -187,6 +187,10 @@ class HS_USBCom:
             raise RuntimeError("Device not opened!")
 
         t = timeout if timeout is not None else self.timeout
+        # CHANGED vs. original: wait at least 2000 ms for the reply.
+        # Original: t = timeout if timeout is not None else self.timeout   (300 ms by default),
+        # which was too short for the reply to 'G'.
+        t = timeout if timeout is not None else max(self.timeout, 2000)
 
         try:
             self.ep_out.write(cmd if isinstance(cmd, bytes) else cmd.encode())
@@ -211,7 +215,7 @@ class HS_USBCom:
             except Exception:
                 pass
             return None
-        
+
 
     def send(self, cmd):
         """Sends command without waiting for an answer"""
@@ -222,7 +226,7 @@ class HS_USBCom:
     def read_frame(self, data_length, timeout=None):
         """Reads binary frame and returns numpy-Array with uint16"""
         t = timeout if timeout is not None else self.timeout
-        byte_count = data_length * 2  # 16bit = 2 Bytes 
+        byte_count = data_length * 2  # 16bit = 2 Bytes
         max_packet = self.ep_in.wMaxPacketSize
 
         # try:
@@ -306,5 +310,3 @@ class StringHelper:
         else:
             print("ArrayType not found")
             return 0xFF
-        
-    
