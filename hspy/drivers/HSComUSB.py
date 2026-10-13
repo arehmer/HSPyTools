@@ -186,7 +186,6 @@ class HS_USBCom:
         if self.dev is None:
             raise RuntimeError("Device not opened!")
 
-        t = timeout if timeout is not None else self.timeout
         # CHANGED vs. original: wait at least 2000 ms for the reply.
         # Original: t = timeout if timeout is not None else self.timeout   (300 ms by default),
         # which was too short for the reply to 'G'.
