@@ -189,7 +189,7 @@ class HS_USBCom:
         # CHANGED vs. original: wait at least 2000 ms for the reply.
         # Original: t = timeout if timeout is not None else self.timeout   (300 ms by default),
         # which was too short for the reply to 'G'.
-        t = timeout if timeout is not None else max(self.timeout, 2000)
+        t = timeout if timeout is not None else max(self.timeout, 6000)
 
         try:
             self.ep_out.write(cmd if isinstance(cmd, bytes) else cmd.encode())
