@@ -54,7 +54,7 @@ if __name__ == '__main__':
     # ArrayType, frame length), so the driver is ready to stream as soon as
     # it is constructed
     usb_driver = USB_HTPA(serial_number=serial,
-                          auto_init = True)
+                          auto_init = False)
     print(f"Firmware: {usb_driver.version}, ArrayType: {usb_driver.ArrayType}")
 
     # %% Create USB_Client thread, which starts the stream and repeatedly
@@ -63,9 +63,13 @@ if __name__ == '__main__':
                             write_buffer=usb_buffer)
 
     #%% Create instance of Imshow thread for plotting using cv2.imshow
+    # plot_thread = Imshow(name='imshow_thread',
+    #                       read_buffer=usb_buffer,
+    #                       ArrayType=usb_driver.ArrayType) # debug
+    
     plot_thread = Imshow(name='imshow_thread',
                          read_buffer=usb_buffer,
-                         ArrayType=usb_driver.ArrayType)
+                         ArrayType=18) # debug
 
     print('Starting threads...')
     usb_thread.start()
