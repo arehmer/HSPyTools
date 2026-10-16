@@ -116,10 +116,12 @@ if __name__ == '__main__':
         # Keep the main process alive and responsive without wasting
         # too many resources, waiting for Enter
         input('Press Enter to stop...\n')
-        # while True:
-        #     time.sleep(0.5)
-    except KeyboardInterrupt:
+        print("Stopping processes...")
+
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl+C still works as a fallback; EOFError if stdin is closed
         print("\nStopping processes...")
+        
     finally:
         # Stop in reverse order regardless of how we exit
         plot_process.stop()

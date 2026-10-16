@@ -210,7 +210,13 @@ class WThread_R1(Thread):
         self._exit = Event()
         self.daemon = True  # dies automatically if main thread exits
 
+    def _setup(self):
+        pass
+
     def run(self):
+        
+        self._setup()
+        
         
         # Check if thread has been stopped
         while not self._exit.is_set():
@@ -227,6 +233,8 @@ class WThread_R1(Thread):
             
             except Exception as e:
                 print(f"[{self.name}] {e}")    
+                
+        self._teardown()
                 
             
     def _target(self):

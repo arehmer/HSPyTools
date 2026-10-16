@@ -72,12 +72,13 @@ if __name__ == '__main__':
     print('Threads started.')
 
     try:
-        # Keep the main thread alive and responsive without wasting
-        # too many ressources, waiting for Ctrl+C
-        while True:
-            time.sleep(0.5)
-    except KeyboardInterrupt:
-        print("\nStopping threads...")
+        # Keep the main process alive and responsive without wasting
+        # too many resources, waiting for Enter
+        input('Press Enter to stop...\n')
+        print("Stopping processes...")
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl+C still works as a fallback; EOFError if stdin is closed
+        print("\nStopping processes...")
     finally:
         # Stop in reverse order regardless of how we exit
         plot_thread.stop()

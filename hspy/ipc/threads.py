@@ -80,14 +80,14 @@ class USB_Client(WThread_R1):
  
     # ── Thread body ──────────────────────────────────────────────────────────
  
-    def run(self):
-        self._setup()
-        try:
-            while not self._exit.is_set():
-                result = self._target()
-                self._put(result)
-        finally:
-            self._teardown()
+    # def run(self):
+    #     self._setup()
+    #     try:
+    #         while not self._exit.is_set():
+    #             result = self._target()
+    #             self._put(result)
+    #     finally:
+    #         self._teardown()
  
     def _setup(self):
  
@@ -126,30 +126,39 @@ class USB_Client(WThread_R1):
  
         return result
  
+    # def _teardown(self):
+    #     # Stop the stream from inside this thread, so the device is never
+    #     # accessed from two threads at once. Closing the driver is left to
+    #     # whoever created it (same ownership as with I2C_Client).
+    #     if self.usb_driver.is_streaming:
+    #         try:
+    #             resp, _ = self.usb_driver.stop_stream()
+    #             print(f"[{self.name}] Stream stopped: {resp!r}")
+    #         except Exception as e:
+    #             print(f"[{self.name}] Stopping stream failed: {e}")
+    
+    
     def _teardown(self):
-        # Stop the stream from inside this thread, so the device is never
-        # accessed from two threads at once. Closing the driver is left to
-        # whoever created it (same ownership as with I2C_Client).
-        if self.usb_driver.is_streaming:
-            try:
-                resp, _ = self.usb_driver.stop_stream()
-                print(f"[{self.name}] Stream stopped: {resp!r}")
-            except Exception as e:
-                print(f"[{self.name}] Stopping stream failed: {e}")
+        # Runs inside the child process once the loop has exited: stop the
+        # stream and release the device (close() stops the stream itself if
+        # it is still running).
+        usb_driver = getattr(self, 'usb_driver', None)
+        if usb_driver is not None:
+            usb_driver.close()    
  
-    def _put(self, result):
-        # Never block the USB loop on a slow consumer: if the buffer is full,
-        # replace the oldest frame with the newest one. A blocked loop would
-        # stop reading the bulk endpoint while the device keeps streaming.
-        while not self._exit.is_set():
-            try:
-                self.write_buffer.put_nowait(result)
-                return
-            except queue.Full:
-                try:
-                    self.write_buffer.get_nowait()
-                except queue.Empty:
-                    pass
+    # def _put(self, result):
+    #     # Never block the USB loop on a slow consumer: if the buffer is full,
+    #     # replace the oldest frame with the newest one. A blocked loop would
+    #     # stop reading the bulk endpoint while the device keeps streaming.
+    #     while not self._exit.is_set():
+    #         try:
+    #             self.write_buffer.put_nowait(result)
+    #             return
+    #         except queue.Full:
+    #             try:
+    #                 self.write_buffer.get_nowait()
+    #             except queue.Empty:
+    #                 pass
  
     def stop(self):
         # The loop notices within one frame-read timeout (300 ms by default)
@@ -534,14 +543,10 @@ class Imshow(RThread_R1):
         
         # Get result from upstream thread
         data = self.read_buffer.get()
-        print(data)
-        print(f"Received frame at {data['t']}")
         
         # Check success flag of upstream thread
         if data['success'] == True:
             
-                    
-                
             frame = data['pix_dK']
     
             # Reshape if not the proper size
@@ -672,11 +677,11 @@ class Imshow(RThread_R1):
         # The opencv window needs to be closed inside the run function,
         # otherwise a window with the same name can never be opened until
         # the console is restarted
-        if self._exit == True:
+        if self._exit.is_set():
             cv2.destroyWindow(self.window_name)
             
     def stop(self):
-        self._exit = True
+        self._exit.set()
 
 
 class DummyConsumer(RThread_R1):
@@ -1144,7 +1149,7 @@ class FileWriter_Thread(RThread):
     def run(self):
         
         # Check if thread has been stopped
-        while self._exit == False:
+        while not self._exit.is_set():
             
             # Acquire the read condition
             with self.read_condition:

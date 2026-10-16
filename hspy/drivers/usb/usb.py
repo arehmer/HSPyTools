@@ -87,6 +87,9 @@ _T_CALIB_READ_MS  = 3000   # per calibration chunk
 _T_CALIB_ACK_MS   = 5000   # per calibration-write acknowledge
 _T_LEFTOVER_MS    = 500    # trailing text after a calibration read
 _T_FLUSH_MS       = 50     # flush_input(): stop once nothing arrived for this long
+_T_IDLE_MS        = 500    # reset(): silence that proves the stream is stopped
+                           # (must be longer than the frame interval of the device)
+_T_FLUSH_MAX_S    = 5.0    # flush_input(): give up if data keeps coming for this long
 _T_RETRY_S        = 0.3    # delay between USB retries
 _N_SET_CONFIG     = 5      # set_configuration() attempts
 _N_READ_SN        = 3      # serial-number read attempts
@@ -325,16 +328,16 @@ class USB_HTPA(USB_Driver):
 
     # ── High-level public API ────────────────────────────────────────────────
 
-    def init(self, flush: bool = True) -> None:
+    def init(self, reset: bool = True) -> None:
         """
         Initialise the driver:
-          1. Discard stale data in the IN endpoint (optional).
+          1. Put the device into command mode (reset(), optional).
           2. Read the firmware version ('v').
           3. Read the configuration string ('G') and extract the ArrayType.
           4. Determine the array geometry and the stream frame length.
         """
-        if flush:
-            self.flush_input()
+        if reset:
+            self.reset()
 
         self.version = self.query(_CMD_VERSION).strip()
         self.config = self.query(_CMD_CONFIG)
@@ -392,6 +395,29 @@ class USB_HTPA(USB_Driver):
 
     # ── Stream control ───────────────────────────────────────────────────────
 
+    def reset(self, idle_ms: int = _T_IDLE_MS) -> int:
+        """
+        Put the device into command mode, whatever state it is in.
+
+        A program that was killed while streaming (e.g. Ctrl+C on Windows,
+        which interrupts child processes before they can stop the stream)
+        leaves the device streaming. Commands sent in that state are answered
+        with frame data instead of text. reset() sends the stop command and
+        discards everything (frames, "STOP!", any other reply) until the
+        device has been silent for idle_ms.
+
+        Returns the number of bytes discarded.
+        """
+        self._streaming = False
+        self._stream_cmd = None
+        self._rx.clear()
+
+        self.write(_CMD_STREAM_STOP)
+        n = self.flush_input(quiet_ms=idle_ms)
+        if n:
+            print(f"[{self.serial_number}] reset: discarded {n} bytes of pending data")
+        return n
+
     def start_stream(self,
                      cmd: Union[bytes, str] = _CMD_STREAM_DK,
                      frame_len: Optional[int] = None) -> Optional[str]:
@@ -446,7 +472,7 @@ class USB_HTPA(USB_Driver):
         self.write(cmd)
         self._streaming = False
         self._stream_cmd = None
-
+        
         # Collect everything until "STOP" shows up (frames still in flight
         # and the response may arrive in the same transfer)
         deadline = time.monotonic() + timeout_ms / 1e3
@@ -454,15 +480,17 @@ class USB_HTPA(USB_Driver):
         while True:
             remaining_ms = int((deadline - time.monotonic()) * 1e3)
             if remaining_ms <= 0:
+                print("Did not receive a 'STOP!' response by the USB device!")
                 break
             try:
                 self._rx += self.read(self._mps * _MAX_BULK_PACKETS, remaining_ms)
             except USB_HTPATimeout:
+                print('USB device timed out upon trying to stop stream!')
                 break
             stop_idx = self._rx.rfind(_RESP_STOP)
             if stop_idx >= 0:
                 break
-
+            
         if stop_idx >= 0:
             payload = bytes(self._rx[:stop_idx])
             response = self._rx[stop_idx:].decode('utf-8', errors='replace').strip()
@@ -689,16 +717,27 @@ class USB_HTPA(USB_Driver):
             self._clear_halt(self._ep_in, self._ep_out)
             raise
 
-    def flush_input(self, quiet_ms: int = _T_FLUSH_MS, max_reads: int = 64) -> int:
-        """Discard pending input. Returns the number of bytes discarded."""
+    def flush_input(self,
+                    quiet_ms: int = _T_FLUSH_MS,
+                    max_s: float = _T_FLUSH_MAX_S) -> int:
+        """
+        Discard pending input until nothing arrived for quiet_ms.
+        Returns the number of bytes discarded.
+
+        Raises USB_HTPAError if data keeps arriving for max_s (the device is
+        still streaming).
+        """
         n = len(self._rx)
         self._rx.clear()
-        for _ in range(max_reads):
+        deadline = time.monotonic() + max_s
+        while time.monotonic() < deadline:
             try:
                 n += len(self.read(self._mps * _MAX_BULK_PACKETS, quiet_ms))
             except USB_HTPATimeout:
-                break
-        return n
+                return n
+        raise USB_HTPAError(
+            f"Input did not go quiet within {max_s} s ({n} bytes discarded) - "
+            f"device still streaming?")
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
