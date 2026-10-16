@@ -53,45 +53,48 @@ if __name__ == '__main__':
     # __init__ already opens the device and calls init() (version, config,
     # ArrayType, frame length), so the driver is ready to stream as soon as
     # it is constructed
-    usb_driver = USB_HTPA(serial_number=serial,
-                          auto_init = False)
-    print(f"Firmware: {usb_driver.version}, ArrayType: {usb_driver.ArrayType}")
+    usb_driver = USB_HTPA(serial_number=serial, auto_init=False)
+    usb_driver.init(reset=False)   # v + G only, no idle 'x'
+    
+    # usb_driver = USB_HTPA(serial_number=serial,
+    #                       auto_init = False)
+    # print(f"Firmware: {usb_driver.version}, ArrayType: {usb_driver.ArrayType}")
 
     # %% Create USB_Client thread, which starts the stream and repeatedly
-    # calls usb_driver.acquire_frame()
-    usb_thread = USB_Client(usb_driver=usb_driver,
-                            write_buffer=usb_buffer)
+    # # calls usb_driver.acquire_frame()
+    # usb_thread = USB_Client(usb_driver=usb_driver,
+    #                         write_buffer=usb_buffer)
 
-    #%% Create instance of Imshow thread for plotting using cv2.imshow
-    # plot_thread = Imshow(name='imshow_thread',
-    #                       read_buffer=usb_buffer,
-    #                       ArrayType=usb_driver.ArrayType) # debug
+    # #%% Create instance of Imshow thread for plotting using cv2.imshow
+    # # plot_thread = Imshow(name='imshow_thread',
+    # #                       read_buffer=usb_buffer,
+    # #                       ArrayType=usb_driver.ArrayType) # debug
     
-    plot_thread = Imshow(name='imshow_thread',
-                         read_buffer=usb_buffer,
-                         ArrayType=18) # debug
+    # plot_thread = Imshow(name='imshow_thread',
+    #                      read_buffer=usb_buffer,
+    #                      ArrayType=18) # debug
 
-    print('Starting threads...')
-    usb_thread.start()
-    plot_thread.start()
-    print('Threads started.')
+    # print('Starting threads...')
+    # usb_thread.start()
+    # plot_thread.start()
+    # print('Threads started.')
 
-    try:
-        # Keep the main process alive and responsive without wasting
-        # too many resources, waiting for Enter
-        input('Press Enter to stop...\n')
-        print("Stopping processes...")
-    except (KeyboardInterrupt, EOFError):
-        # Ctrl+C still works as a fallback; EOFError if stdin is closed
-        print("\nStopping processes...")
-    finally:
-        # Stop in reverse order regardless of how we exit
-        plot_thread.stop()
-        usb_thread.stop()
+    # try:
+    #     # Keep the main process alive and responsive without wasting
+    #     # too many resources, waiting for Enter
+    #     input('Press Enter to stop...\n')
+    #     print("Stopping processes...")
+    # except (KeyboardInterrupt, EOFError):
+    #     # Ctrl+C still works as a fallback; EOFError if stdin is closed
+    #     print("\nStopping processes...")
+    # finally:
+    #     # Stop in reverse order regardless of how we exit
+    #     plot_thread.stop()
+    #     usb_thread.stop()
 
-        usb_thread.join()          # stops the device stream on its way out
-        plot_thread.join()
+    #     usb_thread.join()          # stops the device stream on its way out
+    #     plot_thread.join()
 
-        usb_driver.close()         # release the USB device
+    #     usb_driver.close()         # release the USB device
 
-        print("All threads stopped.")
+    #     print("All threads stopped.")
