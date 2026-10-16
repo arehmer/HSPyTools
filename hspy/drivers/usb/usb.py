@@ -328,7 +328,7 @@ class USB_HTPA(USB_Driver):
 
     # ── High-level public API ────────────────────────────────────────────────
 
-    def init(self, reset: bool = True) -> None:
+    def init(self, reset: bool = False) -> None:
         """
         Initialise the driver:
           1. Put the device into command mode (reset(), optional).
