@@ -68,6 +68,106 @@ _PICKLE_HEADER_SIZE = struct.calcsize(_PICKLE_HEADER_FMT)
 _PICKLE_MAX_CHUNK = 60000
 
 
+class USB_ClientProcess(WProcess_R1):
+    """
+    Multiprocessing version of USB_Client. Runs a USB_HTPA driver in its own
+    process, starts the device's frame stream and writes acquired frames
+    into write_buffer.
+    """
+
+    def __init__(self,
+                 usb_driver_cls,
+                 usb_driver_kwargs: dict,
+                 write_buffer,
+                 stream_cmd: bytes = b'K',
+                 name: str = 'usb_process',
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        usb_driver_cls : type
+            The USB_HTPA class (not an instance!) to construct inside the
+            child process -- opening the USB device (libusb handle) in the
+            parent and handing it to the child is not safe, so construction
+            is deferred to _setup().
+        usb_driver_kwargs : dict
+            Keyword arguments to construct usb_driver_cls with, e.g.
+            {'serial_number': '...'}.
+        write_buffer : Queue / SharedMemoryQueue
+            Buffer that acquired frames are put into.
+        stream_cmd : bytes
+            Command that starts the stream. b'K' (default) streams pixel
+            values in dK, which end up in result['pix_dK'].
+        name : str
+            Process name. Give each process a distinct name when running
+            several devices.
+
+        Returns
+        -------
+        None.
+
+        """
+
+        self.usb_driver_cls = usb_driver_cls
+        self.usb_driver_kwargs = usb_driver_kwargs
+        self.stream_cmd = stream_cmd
+
+        super().__init__(name=name,
+                         write_buffer=write_buffer,
+                         **kwargs)
+
+    def _setup(self):
+
+        # Opens the USB device here, inside the child process.
+        # USB_HTPA.__init__ already calls open() + init() itself.
+        self.usb_driver = self.usb_driver_cls(**self.usb_driver_kwargs)
+
+        # Start continuous frame stream
+        resp = self.usb_driver.start_stream(self.stream_cmd)
+        print(f"[{self.name}] Stream started: {resp!r}")
+
+        # Set image_id counter
+        self.image_id = 0
+
+        # Set time
+        self.t0 = time.time()
+
+    def _target(self):
+
+        # Dictionary for storing results in
+        result = {}
+
+        try:
+            # Acquire one frame from the stream
+            data = self.usb_driver.acquire_frame()
+
+            # Set success flag and store frame data
+            result['success'] = True
+            result.update(data)
+        except Exception as e:
+            # Set success flag to False in case of failure
+            result['success'] = False
+            print(f"[{self.name}] {e}")
+
+        # Store image_id
+        result['image_id'] = self.image_id
+
+        # Increment image_id
+        self.image_id = self.image_id + 1
+
+        return result
+
+    def _teardown(self):
+        # Runs inside the child process once the loop has exited: stop the
+        # stream and release the device (close() stops the stream itself if
+        # it is still running).
+        usb_driver = getattr(self, 'usb_driver', None)
+        if usb_driver is not None:
+            usb_driver.close()
+
+    def stop(self):
+        self._exit.set()
+
 class UDP_ClientProcess(WProcess_R1):
     """
     Multiprocessing version of UDP_Client. Runs an HTPA_UDPReader in its

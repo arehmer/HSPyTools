@@ -9,6 +9,7 @@ import cv2
 import socket
 import struct
 
+import queue
 from queue import Queue
 from threading import Condition
 
@@ -30,8 +31,129 @@ from hspy.readers import HTPA_UDPReader
 from hspytools.tparray import TPArray
 
 from hspy.drivers.i2c import I2C_HTPA32x32d
+from hspy.drivers.usb import USB_HTPA
 
 
+class USB_Client(WThread_R1):
+    """
+    Runs a USB_HTPA driver in its own thread: starts the device's frame
+    stream and repeatedly puts acquired frames into write_buffer.
+ 
+    As with I2C_Client, the driver is constructed (and therefore opened and
+    initialised) by the caller and handed in -- a thread shares the parent
+    process's memory, so this is safe. The thread is the only one that
+    talks to the device while it runs.
+    """
+ 
+    def __init__(self,
+                 usb_driver : USB_HTPA,
+                 write_buffer,
+                 stream_cmd: bytes = b'K',
+                 name: str = 'usb_thread',
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        usb_driver : USB_HTPA
+            Opened and initialised driver instance.
+        write_buffer : queue.Queue
+            Buffer that acquired frames are put into.
+        stream_cmd : bytes
+            Command that starts the stream. b'K' (default) streams pixel
+            values in dK, which end up in result['pix_dK'].
+        name : str
+            Thread name.
+        """
+ 
+
+        self.usb_driver = usb_driver
+        self.write_buffer = write_buffer
+        self.stream_cmd = stream_cmd
+        
+        # Set image_id counter
+        self.image_id = 0
+        
+        super().__init__(name=name, 
+                         write_buffer = write_buffer,
+                         **kwargs)
+ 
+ 
+    # ── Thread body ──────────────────────────────────────────────────────────
+ 
+    def run(self):
+        self._setup()
+        try:
+            while not self._exit.is_set():
+                result = self._target()
+                self._put(result)
+        finally:
+            self._teardown()
+ 
+    def _setup(self):
+ 
+        # Start continuous frame stream
+        resp = self.usb_driver.start_stream(self.stream_cmd)
+        print(f"[{self.name}] Stream started: {resp!r}")
+ 
+        # Set image_id counter
+        self.image_id = 0
+ 
+        # Set time
+        self.t0 = time.time()
+ 
+    def _target(self):
+ 
+        # Dictionary for storing results in
+        result = {}
+ 
+        try:
+            # Acquire one frame from the stream
+            data = self.usb_driver.acquire_frame()
+ 
+            # Set success flag and store frame data
+            result['success'] = True
+            result.update(data)
+        except Exception as e:
+            # Set success flag to False in case of failure
+            result['success'] = False
+            print(f"[{self.name}] {e}")
+ 
+        # Store image_id
+        result['image_id'] = self.image_id
+ 
+        # Increment image_id
+        self.image_id = self.image_id + 1
+ 
+        return result
+ 
+    def _teardown(self):
+        # Stop the stream from inside this thread, so the device is never
+        # accessed from two threads at once. Closing the driver is left to
+        # whoever created it (same ownership as with I2C_Client).
+        if self.usb_driver.is_streaming:
+            try:
+                resp, _ = self.usb_driver.stop_stream()
+                print(f"[{self.name}] Stream stopped: {resp!r}")
+            except Exception as e:
+                print(f"[{self.name}] Stopping stream failed: {e}")
+ 
+    def _put(self, result):
+        # Never block the USB loop on a slow consumer: if the buffer is full,
+        # replace the oldest frame with the newest one. A blocked loop would
+        # stop reading the bulk endpoint while the device keeps streaming.
+        while not self._exit.is_set():
+            try:
+                self.write_buffer.put_nowait(result)
+                return
+            except queue.Full:
+                try:
+                    self.write_buffer.get_nowait()
+                except queue.Empty:
+                    pass
+ 
+    def stop(self):
+        # The loop notices within one frame-read timeout (300 ms by default)
+        self._exit.set()
 
 class UDP_Client(WThread_R1):
     """
@@ -412,7 +534,7 @@ class Imshow(RThread_R1):
         
         # Get result from upstream thread
         data = self.read_buffer.get()
-        
+        print(data)
         print(f"Received frame at {data['t']}")
         
         # Check success flag of upstream thread
@@ -435,10 +557,11 @@ class Imshow(RThread_R1):
             data['frame_plot'] = frame 
             
             # Write annotations to dict
-            annotations = data['annot_frame'].annotations
-            annotations['confirmed'] = False
-            annotations.loc[annotations['label']==1,'confirmed'] = True
-            data['bboxes'] = annotations
+            if 'annot_frame' in data.keys():
+                annotations = data['annot_frame'].annotations
+                annotations['confirmed'] = False
+                annotations.loc[annotations['label']==1,'confirmed'] = True
+                data['bboxes'] = annotations
 
             
         else:
