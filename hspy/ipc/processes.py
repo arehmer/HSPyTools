@@ -807,12 +807,17 @@ class ImshowRecorderProcess(ImshowProcess):
                  record_keys: Optional[Sequence[str]] = None,
                  exclude_keys: Sequence[str] = ('frame_plot',),
                  save_on_stop: bool = True,
+                 window_geometry: Optional[Tuple[int, int, int, int]] = None,
                  **kwargs):
         """
         Parameters
         ----------
         name, read_buffer, ArrayType, SensorType, window_name, **kwargs :
             As for ImshowProcess (e.g. profile=True).
+        window_geometry : (x, y, width, height), optional
+            Position and size of the window on screen. Use different values
+            per process so that several windows don't open on top of each
+            other. None keeps OpenCV's default.
         record_dir : str or Path
             Directory recordings are written to when start_recording() is
             called without a file path. Created if it does not exist.
@@ -838,8 +843,9 @@ class ImshowRecorderProcess(ImshowProcess):
         self.record_keys = None if record_keys is None else tuple(record_keys)
         self.exclude_keys = tuple(exclude_keys)
         self.save_on_stop = save_on_stop
+        self.window_geometry = window_geometry
  
-        # Parent -> child: ('start', path, t_start) / ('stop', t_stop)
+        # Parent -> child: ('start', path, t_start, meta) / ('stop', t_stop, discard)
         # Child -> parent: ('saved', path, n_frames) / ('failed', path, error)
         # Created here in the parent; multiprocessing queues are made to
         # cross the process boundary (unlike locks, sockets, devices).
@@ -858,12 +864,18 @@ class ImshowRecorderProcess(ImshowProcess):
         """True between start_recording() and stop_recording() (parent view)."""
         return self._parent_recording
  
-    def start_recording(self, file_path: Union[str, Path, None] = None) -> Path:
+    def start_recording(self,
+                        file_path: Union[str, Path, None] = None,
+                        meta: Optional[dict] = None) -> Path:
         """
         Start recording. Returns the path the recording will be written to.
  
         file_path : target file. Default:
                     <record_dir>/<process name>_<YYYYmmdd_HHMMSS>.pkl
+        meta      : optional dict of extra information (e.g. measurement
+                    conditions) stored in the file's metadata. Must be
+                    picklable. The built-in keys (t_start, n_frames, ...)
+                    take precedence over keys of the same name.
         """
         if self._parent_recording:
             raise RuntimeError(f"[{self.name}] Already recording to {self._parent_path}")
@@ -874,21 +886,27 @@ class ImshowRecorderProcess(ImshowProcess):
             file_path = self.record_dir / f'{self.name}_{stamp}{_REC_SUFFIX}'
         file_path = Path(file_path)
  
-        self._cmd_queue.put(('start', str(file_path), t_start))
+        self._cmd_queue.put(('start', str(file_path), t_start, dict(meta or {})))
         self._parent_recording = True
         self._parent_path = file_path
         return file_path
  
-    def stop_recording(self) -> Optional[Path]:
+    def stop_recording(self, discard: bool = False) -> Optional[Path]:
         """
         Stop recording. The child writes the file in the background; this
         returns immediately with the file path, or None if no recording
         was running. Use wait_until_saved() to wait for the file.
+ 
+        discard : if True, the recorded frames are thrown away and no file
+                  is written (e.g. when a measurement was aborted). Returns
+                  None in that case.
         """
         if not self._parent_recording:
             return None
-        self._cmd_queue.put(('stop', datetime.now()))
+        self._cmd_queue.put(('stop', datetime.now(), discard))
         self._parent_recording = False
+        if discard:
+            return None
         self._parent_pending += 1
         return self._parent_path
  
@@ -924,8 +942,23 @@ class ImshowRecorderProcess(ImshowProcess):
  
     def _setup(self):
  
+        # Ignore Ctrl+C in this process. On Linux (and Windows) Ctrl+C is
+        # delivered to every process attached to the terminal, which would
+        # kill this process mid-recording. The parent catches Ctrl+C and
+        # shuts down via stop(), which saves a running recording.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+ 
         # Window, TPArray etc. exactly like ImshowProcess
         super()._setup()
+ 
+        # Place the window
+        if self.window_geometry is not None:
+            x, y, w, h = self.window_geometry
+            try:
+                cv2.resizeWindow(self.window_name, w, h)
+                cv2.moveWindow(self.window_name, x, y)
+            except cv2.error:
+                pass
  
         # Recording state -- lives only in the child, only touched by the
         # child's main thread (the display loop)
@@ -933,6 +966,7 @@ class ImshowRecorderProcess(ImshowProcess):
         self._rec_frames: List[dict] = []
         self._rec_path: Optional[Path] = None
         self._rec_t_start: Optional[datetime] = None
+        self._rec_meta: dict = {}
         self._rec_writers: List[threading.Thread] = []
         self._rec_title_shown = False
  
@@ -962,15 +996,29 @@ class ImshowRecorderProcess(ImshowProcess):
             if cmd[0] == 'start':
                 if self._rec_active:                 # should not happen
                     self._save(datetime.now())
-                _, path, t_start = cmd
+                _, path, t_start, meta = cmd
                 self._rec_frames = []
                 self._rec_path = Path(path)
                 self._rec_t_start = t_start
+                self._rec_meta = meta
                 self._rec_active = True
                 print(f"[{self.name}] Recording started -> {path}")
  
             elif cmd[0] == 'stop':
-                self._save(cmd[1])
+                _, t_stop, discard = cmd
+                if discard:
+                    self._discard()
+                else:
+                    self._save(t_stop)
+ 
+    def _discard(self):
+        """Stop recording and throw the frames away."""
+        if not self._rec_active:
+            return
+        print(f"[{self.name}] Recording discarded ({len(self._rec_frames)} frames): "
+              f"{self._rec_path}")
+        self._rec_active = False
+        self._rec_frames = []
  
     def _save(self, t_stop: datetime):
         """Stop recording and write the frames in a writer thread."""
@@ -979,7 +1027,8 @@ class ImshowRecorderProcess(ImshowProcess):
         self._rec_active = False
         frames, self._rec_frames = self._rec_frames, []
  
-        meta = {'format_version': _REC_FORMAT_VERSION,
+        meta = {**self._rec_meta,                         # user meta first ...
+                'format_version': _REC_FORMAT_VERSION,    # ... built-in keys win
                 'source': self.name,
                 'window_name': self.window_name,
                 'tparray_npsize': getattr(self.tparray, '_npsize', None),
@@ -1046,10 +1095,7 @@ class ImshowRecorderProcess(ImshowProcess):
             if self.save_on_stop:
                 self._save(datetime.now())
             else:
-                print(f"[{self.name}] Recording discarded "
-                      f"({len(self._rec_frames)} frames, save_on_stop=False)")
-                self._rec_active = False
-                self._rec_frames = []
+                self._discard()
  
         # Do not exit before every file is completely written
         for writer in self._rec_writers:
