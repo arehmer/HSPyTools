@@ -54,7 +54,7 @@ if __name__ == '__main__':
     # ArrayType, frame length), so the driver is ready to stream as soon as
     # it is constructed
     usb_driver = USB_HTPA(serial_number=serial, auto_init=False)
-    usb_driver.init(reset=True)   # v + G only, no idle 'x'
+    usb_driver.init(reset=False)   # v + G only, no idle 'x'
     
     # usb_driver = USB_HTPA(serial_number=serial,
     #                       auto_init = False)
