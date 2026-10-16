@@ -53,7 +53,8 @@ if __name__ == '__main__':
     # __init__ already opens the device and calls init() (version, config,
     # ArrayType, frame length), so the driver is ready to stream as soon as
     # it is constructed
-    usb_driver = USB_HTPA(serial_number=serial)
+    usb_driver = USB_HTPA(serial_number=serial,
+                          auto_init = False)
     print(f"Firmware: {usb_driver.version}, ArrayType: {usb_driver.ArrayType}")
 
     # %% Create USB_Client thread, which starts the stream and repeatedly
