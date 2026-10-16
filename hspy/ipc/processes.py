@@ -47,6 +47,7 @@ import time
 import socket
 import struct
 import datetime
+import signal
 import pickle as pkl
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union

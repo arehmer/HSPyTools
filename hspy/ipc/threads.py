@@ -1067,10 +1067,10 @@ def load_recording(path: Union[str, Path]) -> Tuple[dict, List[dict]]:
     """
     frames = []
     with open(path, 'rb') as f:
-        meta = pickle.load(f)
+        meta = pkl.load(f)
         while True:
             try:
-                frames.append(pickle.load(f))
+                frames.append(pkl.load(f))
             except EOFError:
                 break
     return meta, frames
