@@ -46,9 +46,13 @@ created inside _setup(), never in __init__.
 import time
 import socket
 import struct
+import datetime
 import pickle as pkl
+from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
+import queue
 from multiprocessing import Queue as MPQueue
+import threading
 
 import cv2
 import numpy as np
@@ -753,7 +757,7 @@ class ImshowProcess(RProcess_R1):
     def stop(self):
         self._exit.set()
 
-REC_SUFFIX = '.pkl'
+_REC_SUFFIX = '.pkl'
 _PART_SUFFIX = '.part'
 _REC_FORMAT_VERSION = 1
         
