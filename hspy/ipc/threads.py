@@ -9,8 +9,11 @@ import cv2
 import socket
 import struct
 
+from typing import List, Optional, Sequence, Tuple, Union
+
 import queue
 from queue import Queue
+import threading
 from threading import Condition
 
 import numpy as np
@@ -547,7 +550,10 @@ class Imshow(RThread_R1):
         # Check success flag of upstream thread
         if data['success'] == True:
             
-            frame = data['pix_dK']
+            if 'pix_dK' in data.keys():
+                frame = data['pix_dK']
+            else:
+                frame = data['pix']
     
             # Reshape if not the proper size
             if frame.ndim == 1:
@@ -682,6 +688,246 @@ class Imshow(RThread_R1):
             
     def stop(self):
         self._exit.set()
+
+_REC_SUFFIX = '.pkl'
+_PART_SUFFIX = '.part'
+_REC_FORMAT_VERSION = 1
+ 
+ 
+class ImshowRecorder(Imshow):
+    """
+    Imshow thread with recording. Displays every frame exactly like Imshow;
+    between start_recording() and stop_recording() every successfully
+    received frame dict is also kept, and written to a pickle file in the
+    background once recording stops.
+ 
+    start_recording() / stop_recording() are the "commands": call them from
+    any thread (e.g. the main thread reacting to user input).
+    """
+ 
+    def __init__(self,
+                 name: str,
+                 read_buffer,
+                 ArrayType: int = None,
+                 SensorType: int = None,
+                 record_dir: Union[str, Path] = '.',
+                 record_keys: Optional[Sequence[str]] = None,
+                 exclude_keys: Sequence[str] = ('frame_plot',),
+                 save_on_stop: bool = True,
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        name, read_buffer, ArrayType, SensorType, **kwargs :
+            As for Imshow (e.g. window_name=...).
+        record_dir : str or Path
+            Directory recordings are written to when start_recording() is
+            called without a file path. Created if it does not exist.
+        record_keys : sequence of str, optional
+            Keys of the frame dict to record. None (default) records all
+            keys except exclude_keys.
+        exclude_keys : sequence of str
+            Keys never recorded. Default: 'frame_plot' (the normalised
+            uint8 display image, which can be recomputed from the data).
+        save_on_stop : bool
+            If True (default) and a recording is still running when the
+            thread is stopped, it is stopped and written to file.
+        """
+ 
+        super().__init__(name=name,
+                         read_buffer=read_buffer,
+                         ArrayType=ArrayType,
+                         SensorType=SensorType,
+                         **kwargs)
+ 
+        self.record_dir = Path(record_dir)
+        self.record_keys = None if record_keys is None else tuple(record_keys)
+        self.exclude_keys = frozenset(exclude_keys)
+        self.save_on_stop = save_on_stop
+ 
+        # Recording state, shared between the display thread (_target) and
+        # the thread calling start/stop_recording -> guarded by a lock
+        self._rec_lock = threading.Lock()
+        self._rec_active = False
+        self._rec_frames: List[dict] = []
+        self._rec_path: Optional[Path] = None
+        self._rec_t_start: Optional[datetime] = None
+ 
+        # Writer threads that have been started (one per recording)
+        self._rec_writers: List[threading.Thread] = []
+ 
+        # Window-title state, only touched by the display thread
+        self._rec_title_shown = False
+ 
+    # ── Commands ─────────────────────────────────────────────────────────
+ 
+    @property
+    def is_recording(self) -> bool:
+        return self._rec_active
+ 
+    @property
+    def n_recorded(self) -> int:
+        """Number of frames recorded so far in the current recording."""
+        return len(self._rec_frames)
+ 
+    def start_recording(self, file_path: Union[str, Path, None] = None) -> Path:
+        """
+        Start recording. Returns the path the recording will be written to.
+ 
+        file_path : target file. Default:
+                    <record_dir>/<thread name>_<YYYYmmdd_HHMMSS>.pkl
+        """
+        t_start = datetime.now()
+ 
+        if file_path is None:
+            stamp = t_start.strftime('%Y%m%d_%H%M%S')
+            file_path = self.record_dir / f'{self.name}_{stamp}{_REC_SUFFIX}'
+        file_path = Path(file_path)
+ 
+        with self._rec_lock:
+            if self._rec_active:
+                raise RuntimeError(f"[{self.name}] Already recording to {self._rec_path}")
+            self._rec_frames = []
+            self._rec_path = file_path
+            self._rec_t_start = t_start
+            self._rec_active = True
+ 
+        print(f"[{self.name}] Recording started -> {file_path}")
+        return file_path
+ 
+    def stop_recording(self) -> Optional[Path]:
+        """
+        Stop recording and write the recorded frames to file in a background
+        thread. Returns immediately with the path the file is being written
+        to, or None if no recording was running.
+ 
+        Use wait_until_saved() to wait for the file to be complete.
+        """
+        t_stop = datetime.now()
+ 
+        with self._rec_lock:
+            if not self._rec_active:
+                return None
+            self._rec_active = False
+            frames, self._rec_frames = self._rec_frames, []
+            path = self._rec_path
+            t_start = self._rec_t_start
+ 
+        meta = {'format_version': _REC_FORMAT_VERSION,
+                'source': self.name,
+                'window_name': self.window_name,
+                'tparray_npsize': getattr(self.tparray, '_npsize', None),
+                't_start': t_start,
+                't_stop': t_stop,
+                'n_frames': len(frames)}
+ 
+        print(f"[{self.name}] Recording stopped: {len(frames)} frames, writing {path} ...")
+ 
+        # Non-daemon: the interpreter waits for the file to be complete
+        # even if the main thread ends first
+        writer = threading.Thread(target=self._write_recording,
+                                  args=(path, meta, frames),
+                                  name=f'{self.name}_writer',
+                                  daemon=False)
+        self._rec_writers.append(writer)
+        writer.start()
+        return path
+ 
+    def wait_until_saved(self, timeout: Optional[float] = None) -> bool:
+        """
+        Wait until all recordings started so far are written. Returns True
+        if all writers have finished.
+        """
+        deadline = None if timeout is None else time.monotonic() + timeout
+        for writer in list(self._rec_writers):
+            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            writer.join(remaining)
+        self._rec_writers = [w for w in self._rec_writers if w.is_alive()]
+        return not self._rec_writers
+ 
+    def stop(self):
+        # Save a running recording when the thread is stopped
+        if self.save_on_stop and self._rec_active:
+            self.stop_recording()
+        super().stop()
+ 
+    # ── Display loop hook ────────────────────────────────────────────────
+ 
+    def _target(self):
+ 
+        # Get + preprocess the frame exactly like Imshow
+        data = super()._target()
+ 
+        # Keep it if recording. Only a shallow copy of the dict is stored:
+        # the arrays are referenced, not copied (each frame from the
+        # upstream thread comes with its own arrays).
+        if self._rec_active and data.get('success') is True:
+            entry = self._select_keys(data)
+            with self._rec_lock:
+                if self._rec_active:            # may have stopped meanwhile
+                    self._rec_frames.append(entry)
+ 
+        # Show the recording state in the window title. Done here because
+        # HighGUI calls must come from the thread that owns the window.
+        if self._rec_active != self._rec_title_shown:
+            self._rec_title_shown = self._rec_active
+            title = f'{self.window_name}  [REC]' if self._rec_active else self.window_name
+            try:
+                cv2.setWindowTitle(self.window_name, title)
+            except cv2.error:
+                pass
+ 
+        return data
+ 
+    # ── Helpers ──────────────────────────────────────────────────────────
+ 
+    def _select_keys(self, data: dict) -> dict:
+        if self.record_keys is not None:
+            return {k: data[k] for k in self.record_keys if k in data}
+        return {k: v for k, v in data.items() if k not in self.exclude_keys}
+ 
+    def _write_recording(self, path: Path, meta: dict, frames: List[dict]) -> None:
+        """Runs in the writer thread."""
+        part = path.with_name(path.name + _PART_SUFFIX)
+        t0 = time.perf_counter()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(part, 'wb') as f:
+                pkl.dump(meta, f, protocol=pkl.HIGHEST_PROTOCOL)
+                for frame in frames:
+                    pkl.dump(frame, f, protocol=pkl.HIGHEST_PROTOCOL)
+                    time.sleep(0)         # yield the GIL to the display thread
+            part.replace(path)            # complete -> final name
+            print(f"[{self.name}] Saved {meta['n_frames']} frames to {path} "
+                  f"({path.stat().st_size / 1e6:.1f} MB, "
+                  f"{time.perf_counter() - t0:.1f} s)")
+        except Exception as e:
+            print(f"[{self.name}] Writing {path} failed: {e}")
+            try:
+                part.unlink()
+            except OSError:
+                pass
+ 
+ 
+def load_recording(path: Union[str, Path]) -> Tuple[dict, List[dict]]:
+    """
+    Load a recording written by ImshowRecorder.
+ 
+    Returns
+    -------
+    (meta, frames)
+        meta   : dict with source, window_name, t_start, t_stop, n_frames, ...
+        frames : list of the recorded frame dicts, in recording order
+    """
+    frames = []
+    with open(path, 'rb') as f:
+        meta = pkl.load(f)
+        while True:
+            try:
+                frames.append(pkl.load(f))
+            except EOFError:
+                break
+    return meta, frames
 
 
 class DummyConsumer(RThread_R1):

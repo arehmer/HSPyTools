@@ -47,6 +47,7 @@ import time
 import socket
 import struct
 import pickle as pkl
+from typing import List, Optional, Sequence, Tuple, Union
 from multiprocessing import Queue as MPQueue
 
 import cv2
@@ -751,3 +752,322 @@ class ImshowProcess(RProcess_R1):
 
     def stop(self):
         self._exit.set()
+
+REC_SUFFIX = '.pkl'
+_PART_SUFFIX = '.part'
+_REC_FORMAT_VERSION = 1
+        
+class _RecordingTap:
+    """
+    Stands in for read_buffer inside the child process: forwards get() to
+    the real buffer and hands every item to a callback before returning it.
+    Lets ImshowRecorderProcess reuse ImshowProcess._target() unchanged.
+    All other attributes are forwarded to the real buffer.
+    """
+ 
+    def __init__(self, buffer, on_item):
+        self._buffer = buffer
+        self._on_item = on_item
+ 
+    def get(self, *args, **kwargs):
+        item = self._buffer.get(*args, **kwargs)
+        self._on_item(item)
+        return item
+ 
+    def __getattr__(self, attr):
+        return getattr(self._buffer, attr)
+ 
+ 
+class ImshowRecorderProcess(ImshowProcess):
+    """
+    ImshowProcess with recording. Displays every frame exactly like
+    ImshowProcess; between start_recording() and stop_recording() every
+    successfully received frame dict is also kept and, once recording
+    stops, written to a pickle file in the background.
+ 
+    start_recording() / stop_recording() / wait_until_saved() are called
+    from the PARENT process (e.g. the main script reacting to user input).
+    """
+ 
+    def __init__(self,
+                 name: str,
+                 read_buffer,
+                 ArrayType: int = None,
+                 SensorType: int = None,
+                 window_name: str = 'Sensor stream',
+                 record_dir: Union[str, Path] = '.',
+                 record_keys: Optional[Sequence[str]] = None,
+                 exclude_keys: Sequence[str] = ('frame_plot',),
+                 save_on_stop: bool = True,
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        name, read_buffer, ArrayType, SensorType, window_name, **kwargs :
+            As for ImshowProcess (e.g. profile=True).
+        record_dir : str or Path
+            Directory recordings are written to when start_recording() is
+            called without a file path. Created if it does not exist.
+        record_keys : sequence of str, optional
+            Keys of the frame dict to record. None (default) records all
+            keys except exclude_keys.
+        exclude_keys : sequence of str
+            Keys never recorded.
+        save_on_stop : bool
+            If True (default) and a recording is still running when the
+            process is stopped, it is written to file before the process
+            exits.
+        """
+ 
+        super().__init__(name=name,
+                         read_buffer=read_buffer,
+                         ArrayType=ArrayType,
+                         SensorType=SensorType,
+                         window_name=window_name,
+                         **kwargs)
+ 
+        self.record_dir = Path(record_dir)
+        self.record_keys = None if record_keys is None else tuple(record_keys)
+        self.exclude_keys = tuple(exclude_keys)
+        self.save_on_stop = save_on_stop
+ 
+        # Parent -> child: ('start', path, t_start) / ('stop', t_stop)
+        # Child -> parent: ('saved', path, n_frames) / ('failed', path, error)
+        # Created here in the parent; multiprocessing queues are made to
+        # cross the process boundary (unlike locks, sockets, devices).
+        self._cmd_queue = MPQueue()
+        self._status_queue = MPQueue()
+ 
+        # Parent-side view of the recording state (only used in the parent)
+        self._parent_recording = False
+        self._parent_path: Optional[Path] = None
+        self._parent_pending = 0          # saves requested but not yet confirmed
+ 
+    # ── Commands (PARENT process) ────────────────────────────────────────
+ 
+    @property
+    def is_recording(self) -> bool:
+        """True between start_recording() and stop_recording() (parent view)."""
+        return self._parent_recording
+ 
+    def start_recording(self, file_path: Union[str, Path, None] = None) -> Path:
+        """
+        Start recording. Returns the path the recording will be written to.
+ 
+        file_path : target file. Default:
+                    <record_dir>/<process name>_<YYYYmmdd_HHMMSS>.pkl
+        """
+        if self._parent_recording:
+            raise RuntimeError(f"[{self.name}] Already recording to {self._parent_path}")
+ 
+        t_start = datetime.now()
+        if file_path is None:
+            stamp = t_start.strftime('%Y%m%d_%H%M%S')
+            file_path = self.record_dir / f'{self.name}_{stamp}{_REC_SUFFIX}'
+        file_path = Path(file_path)
+ 
+        self._cmd_queue.put(('start', str(file_path), t_start))
+        self._parent_recording = True
+        self._parent_path = file_path
+        return file_path
+ 
+    def stop_recording(self) -> Optional[Path]:
+        """
+        Stop recording. The child writes the file in the background; this
+        returns immediately with the file path, or None if no recording
+        was running. Use wait_until_saved() to wait for the file.
+        """
+        if not self._parent_recording:
+            return None
+        self._cmd_queue.put(('stop', datetime.now()))
+        self._parent_recording = False
+        self._parent_pending += 1
+        return self._parent_path
+ 
+    def wait_until_saved(self, timeout: Optional[float] = None) -> List[tuple]:
+        """
+        Wait until the child confirms every recording stopped so far.
+ 
+        Returns the confirmations received, each ('saved', path, n_frames)
+        or ('failed', path, error). Fewer entries than recordings means the
+        timeout expired first.
+        """
+        results = []
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self._parent_pending > 0:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                break
+            try:
+                results.append(self._status_queue.get(timeout=remaining))
+            except queue.Empty:
+                break
+            self._parent_pending -= 1
+        return results
+ 
+    def stop(self):
+        # A running recording is saved by the child on its way out
+        if self._parent_recording and self.save_on_stop:
+            self._parent_recording = False
+            self._parent_pending += 1
+        super().stop()
+ 
+    # ── Child process ────────────────────────────────────────────────────
+ 
+    def _setup(self):
+ 
+        # Window, TPArray etc. exactly like ImshowProcess
+        super()._setup()
+ 
+        # Recording state -- lives only in the child, only touched by the
+        # child's main thread (the display loop)
+        self._rec_active = False
+        self._rec_frames: List[dict] = []
+        self._rec_path: Optional[Path] = None
+        self._rec_t_start: Optional[datetime] = None
+        self._rec_writers: List[threading.Thread] = []
+        self._rec_title_shown = False
+ 
+        # Every item ImshowProcess._target() gets from the buffer passes
+        # through _on_frame() first
+        self.read_buffer = _RecordingTap(self.read_buffer, self._on_frame)
+ 
+    def _on_frame(self, data):
+        """Called by _RecordingTap for every item, before it is displayed."""
+ 
+        self._poll_commands()
+ 
+        if self._rec_active and isinstance(data, dict) and data.get('success') is True:
+            # Only a shallow copy of the dict: arrays are referenced, not
+            # copied (every item from the buffer is a fresh object)
+            self._rec_frames.append(self._select_keys(data))
+ 
+        self._update_title()
+ 
+    def _poll_commands(self):
+        while True:
+            try:
+                cmd = self._cmd_queue.get_nowait()
+            except queue.Empty:
+                return
+ 
+            if cmd[0] == 'start':
+                if self._rec_active:                 # should not happen
+                    self._save(datetime.now())
+                _, path, t_start = cmd
+                self._rec_frames = []
+                self._rec_path = Path(path)
+                self._rec_t_start = t_start
+                self._rec_active = True
+                print(f"[{self.name}] Recording started -> {path}")
+ 
+            elif cmd[0] == 'stop':
+                self._save(cmd[1])
+ 
+    def _save(self, t_stop: datetime):
+        """Stop recording and write the frames in a writer thread."""
+        if not self._rec_active:
+            return
+        self._rec_active = False
+        frames, self._rec_frames = self._rec_frames, []
+ 
+        meta = {'format_version': _REC_FORMAT_VERSION,
+                'source': self.name,
+                'window_name': self.window_name,
+                'tparray_npsize': getattr(self.tparray, '_npsize', None),
+                't_start': self._rec_t_start,
+                't_stop': t_stop,
+                'n_frames': len(frames)}
+ 
+        print(f"[{self.name}] Recording stopped: {len(frames)} frames, "
+              f"writing {self._rec_path} ...")
+ 
+        writer = threading.Thread(target=self._write_recording,
+                                  args=(self._rec_path, meta, frames),
+                                  name=f'{self.name}_writer',
+                                  daemon=False)
+        self._rec_writers.append(writer)
+        writer.start()
+ 
+    def _write_recording(self, path: Path, meta: dict, frames: List[dict]) -> None:
+        """Runs in a writer thread inside the child process."""
+        part = path.with_name(path.name + _PART_SUFFIX)
+        t0 = time.perf_counter()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(part, 'wb') as f:
+                pkl.dump(meta, f, protocol=pkl.HIGHEST_PROTOCOL)
+                for frame in frames:
+                    pkl.dump(frame, f, protocol=pkl.HIGHEST_PROTOCOL)
+                    time.sleep(0)         # yield the GIL to the display loop
+            part.replace(path)            # complete -> final name
+            print(f"[{self.name}] Saved {meta['n_frames']} frames to {path} "
+                  f"({path.stat().st_size / 1e6:.1f} MB, "
+                  f"{time.perf_counter() - t0:.1f} s)")
+            self._status_queue.put(('saved', str(path), meta['n_frames']))
+        except Exception as e:
+            print(f"[{self.name}] Writing {path} failed: {e}")
+            try:
+                part.unlink()
+            except OSError:
+                pass
+            self._status_queue.put(('failed', str(path), str(e)))
+ 
+    def _update_title(self):
+        # Show the recording state in the window title
+        if self._rec_active != self._rec_title_shown:
+            self._rec_title_shown = self._rec_active
+            title = f'{self.window_name}  [REC]' if self._rec_active else self.window_name
+            try:
+                cv2.setWindowTitle(self.window_name, title)
+            except cv2.error:
+                pass
+ 
+    def _select_keys(self, data: dict) -> dict:
+        if self.record_keys is not None:
+            return {k: data[k] for k in self.record_keys if k in data}
+        return {k: v for k, v in data.items() if k not in self.exclude_keys}
+ 
+    def _teardown(self):
+ 
+        # Commands that arrived after the last frame
+        self._poll_commands()
+ 
+        # Recording still running when the process was stopped
+        if self._rec_active:
+            if self.save_on_stop:
+                self._save(datetime.now())
+            else:
+                print(f"[{self.name}] Recording discarded "
+                      f"({len(self._rec_frames)} frames, save_on_stop=False)")
+                self._rec_active = False
+                self._rec_frames = []
+ 
+        # Do not exit before every file is completely written
+        for writer in self._rec_writers:
+            writer.join()
+ 
+        # Destroy the window (ImshowProcess)
+        super()._teardown()
+ 
+ 
+def load_recording(path: Union[str, Path]) -> Tuple[dict, List[dict]]:
+    """
+    Load a recording written by ImshowRecorderProcess (or ImshowRecorder --
+    same format).
+ 
+    Returns
+    -------
+    (meta, frames)
+        meta   : dict with source, window_name, t_start, t_stop, n_frames, ...
+        frames : list of the recorded frame dicts, in recording order
+    """
+    frames = []
+    with open(path, 'rb') as f:
+        meta = pkl.load(f)
+        while True:
+            try:
+                frames.append(pkl.load(f))
+            except EOFError:
+                break
+    return meta, frames

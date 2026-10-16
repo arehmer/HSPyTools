@@ -58,6 +58,7 @@ _INTERFACE = 0
 _CMD_VERSION      = b'v'                    # firmware version string
 _CMD_CONFIG       = b'G'                    # configuration string ("... Arraytype N ...")
 _CMD_STREAM_DK    = b'K'                    # start stream, pixel values in dK
+_CMD_STREAM_V     = b't'                    # start stream, pixel values in digits
 _CMD_STREAM_STOP  = b'x'                    # stop stream, device answers "STOP!"
 _CMD_CALIB_READ   = b'n'                    # dump calibration data
 _CMD_CALIB_WRITE  = b'Set EEPROM data\r\n'  # enter calibration-write mode
