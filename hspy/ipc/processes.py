@@ -677,7 +677,11 @@ class ImshowProcess(RProcess_R1):
         if data['success'] is not True:
             return
 
-        frame = data['pix_dK']
+        if 'pix_dK' in data.keys():
+            frame = data['pix_dK']
+        else:
+            print(data.keys())
+            frame = data['pix']
 
         # Reshape if not the proper size
         if frame.ndim == 1:

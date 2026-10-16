@@ -80,7 +80,7 @@ if __name__ == '__main__':
         usb_processes.append(USB_ClientProcess(usb_driver_cls=USB_HTPA,
                                                usb_driver_kwargs={'serial_number': sn},
                                                write_buffer=usb_buffer,
-                                               stream_cmd=b'K',
+                                               stream_cmd=b't',
                                                name=f'usb_process_{sn}'))
 
         # The process name is used in the recording's file name

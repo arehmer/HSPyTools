@@ -509,134 +509,278 @@ class UDP_PickleClient(WThread_R1):
         self._socket.close()
 
 
+class ImshowDisplay(threading.Thread):
+    """
+    The only thread that calls OpenCV HighGUI functions. Other threads call
+    its namedWindow / imshow / setWindowTitle / destroyWindow methods
+    (same signatures as cv2), which only queue the request and return
+    immediately; this thread carries them out.
+ 
+    Only the newest image per window is shown: if Imshow threads deliver
+    faster than the display can draw, older images are skipped instead of
+    piling up -- the Imshow threads are never blocked.
+ 
+    New windows are tiled across the screen (window_size, columns), so
+    several windows don't open on top of each other.
+    """
+ 
+    def __init__(self,
+                 name: str = 'imshow_display',
+                 window_size: Optional[Tuple[int, int]] = (640, 480),
+                 columns: int = 3,
+                 origin: Tuple[int, int] = (20, 20),
+                 spacing: Tuple[int, int] = (20, 60),
+                 period_s: float = 0.01):
+        """
+        Parameters
+        ----------
+        window_size : (width, height) every new window is resized to, or
+                      None to keep OpenCV's default size (and position).
+        columns     : windows per row when tiling.
+        origin      : screen position of the first window.
+        spacing     : (x, y) gap between windows (y includes the title bar).
+        period_s    : max. time between two waitKey() calls, i.e. how often
+                      windows are serviced (repaint, move, resize) even
+                      when no new image arrives.
+        """
+        super().__init__(name=name, daemon=True)
+ 
+        self.window_size = window_size
+        self.columns = columns
+        self.origin = origin
+        self.spacing = spacing
+        self.period_s = period_s
+ 
+        self._lock = threading.Lock()
+        self._ops = deque()            # window operations, in call order
+        self._frames = {}              # window name -> newest image not yet shown
+        self._wakeup = threading.Event()
+        self._exit = threading.Event()
+ 
+        # Only touched by this thread
+        self._open = []                # windows created, in creation order
+        self._n_created = 0
+ 
+    # ── cv2-compatible API (called from any thread) ──────────────────────
+ 
+    def namedWindow(self, winname: str, flags: int = cv2.WINDOW_NORMAL) -> None:
+        self._queue_op(('create', winname, flags))
+ 
+    def imshow(self, winname: str, mat: np.ndarray) -> None:
+        with self._lock:
+            self._frames[winname] = mat          # replaces an older, unshown image
+        self._wakeup.set()
+ 
+    def waitKey(self, delay: int = 0) -> int:
+        # Events are processed by this thread's own waitKey() calls
+        return -1
+ 
+    def setWindowTitle(self, winname: str, title: str) -> None:
+        self._queue_op(('title', winname, title))
+ 
+    def destroyWindow(self, winname: str) -> None:
+        with self._lock:
+            self._frames.pop(winname, None)
+            self._ops.append(('destroy', winname))
+        self._wakeup.set()
+ 
+    def stop(self) -> None:
+        self._exit.set()
+        self._wakeup.set()
+ 
+    # ── Display loop (this thread only) ──────────────────────────────────
+ 
+    def run(self):
+        try:
+            while not self._exit.is_set():
+                self._wakeup.wait(self.period_s)
+                self._wakeup.clear()
+ 
+                with self._lock:
+                    ops = list(self._ops)
+                    self._ops.clear()
+                    frames, self._frames = self._frames, {}
+ 
+                for op in ops:
+                    self._apply(op)
+ 
+                for winname, mat in frames.items():
+                    if winname in self._open:    # ignore images for closed windows
+                        cv2.imshow(winname, mat)
+ 
+                cv2.waitKey(1)
+        finally:
+            for winname in list(self._open):
+                self._apply(('destroy', winname))
+            cv2.waitKey(1)
+ 
+    def _queue_op(self, op) -> None:
+        with self._lock:
+            self._ops.append(op)
+        self._wakeup.set()
+ 
+    def _apply(self, op) -> None:
+        kind, winname = op[0], op[1]
+        try:
+            if kind == 'create' and winname not in self._open:
+                cv2.namedWindow(winname, op[2])
+                self._place(winname)
+                self._open.append(winname)
+ 
+            elif kind == 'title' and winname in self._open:
+                cv2.setWindowTitle(winname, op[2])
+ 
+            elif kind == 'destroy' and winname in self._open:
+                cv2.destroyWindow(winname)
+                self._open.remove(winname)
+ 
+        except cv2.error as e:
+            print(f"[{self.name}] {kind} '{winname}' failed: {e}")
+ 
+    def _place(self, winname: str) -> None:
+        if self.window_size is None:
+            return
+        w, h = self.window_size
+        i = self._n_created
+        self._n_created += 1
+        x = self.origin[0] + (i % self.columns) * (w + self.spacing[0])
+        y = self.origin[1] + (i // self.columns) * (h + self.spacing[1])
+        cv2.resizeWindow(winname, w, h)
+        cv2.moveWindow(winname, x, y)
+ 
+ 
 class Imshow(RThread_R1):
     """
     Class for plotting frames and possibly bounding boxes in a thread.
+ 
+    display : ImshowDisplay, optional
+        If given, all window operations are carried out by that thread
+        (required on Linux when several Imshow threads run at once). If
+        None, this thread calls cv2 directly (as before).
     """
-    
+ 
     def __init__(self,
                  name :str,
                  read_buffer:Queue,
                  ArrayType:int = None,
                  SensorType:int = None,
+                 display: Optional[ImshowDisplay] = None,           # CHANGED
                  **kwargs):
-        
+ 
         if ArrayType is None and SensorType is not None:
             self.tparray = TPArray(SensorType = SensorType)
         elif ArrayType is not None and SensorType is None:
             self.tparray = TPArray(ArrayType = ArrayType)
         else:
             raise Exception('Either ArrayType or SensorType must be provided.')
-            
+ 
         self.num_pix = len(self.tparray._pix)
-        
+ 
         self.window_name = kwargs.pop('window_name','Sensor stream')
-        
+ 
+        # Window operations go to the display thread, or directly to cv2   # CHANGED
+        self._gui = cv2 if display is None else display                    # CHANGED
+ 
         # Set time
         self.t0 = time.time()
-        
+ 
         # Call parent class
         super().__init__(name = name,
                          read_buffer = read_buffer,
                          **kwargs)
-    
+ 
     def _target(self):
-        
-        # print('Executed imshow thread: ' + str(time.time()-self.t0) )
-        
+ 
         # Get result from upstream thread
         data = self.read_buffer.get()
-        
+ 
         # Check success flag of upstream thread
         if data['success'] == True:
-            
+ 
             if 'pix_dK' in data.keys():
                 frame = data['pix_dK']
             else:
                 frame = data['pix']
-    
+ 
             # Reshape if not the proper size
             if frame.ndim == 1:
                 frame = frame[0:self.num_pix]
                 frame = frame.reshape(self.tparray._npsize)
-                 
+ 
             # convert to opencv type
             frame = cv2.normalize(frame,frame,0,255,cv2.NORM_MINMAX)
             frame = frame.astype(np.uint8)
-            
+ 
             # Save to dict
-            data['frame_plot'] = frame 
-            
+            data['frame_plot'] = frame
+ 
             # Write annotations to dict
             if 'annot_frame' in data.keys():
                 annotations = data['annot_frame'].annotations
                 annotations['confirmed'] = False
                 annotations.loc[annotations['label']==1,'confirmed'] = True
                 data['bboxes'] = annotations
-
-            
+ 
         else:
             # If upstream thread failed, set success flag to False
             data['success'] = False
-
-            
+ 
         return data
-    
+ 
     def run(self):
-        
-        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
-        
+ 
+        self._gui.namedWindow(self.window_name, cv2.WINDOW_NORMAL)        # CHANGED
+ 
         # Check if thread has been stopped
         while not self._exit.is_set():
-            
+ 
             # Execute target function
             data = self._target()
-            
+ 
             # Check success flag of upstream thread
             if data['success'] is True:
-                
+ 
                 # Get frame (processed)
                 frame = data['frame_plot']
-                
-                # Scale it up by a factor of 5
+ 
+                # Scale it up by a factor of 10
                 sf = 10
-                # frame = cv2.resize(frame, (0,0), fx=sf, fy=sf) 
                 frame = np.repeat(np.repeat(frame, sf, axis=0), sf, axis=1)
-                
-                # Convert frame to RGB to be able to plot colored 
+ 
+                # Convert frame to RGB to be able to plot colored
                 # boxes
                 frame = cv2.cvtColor(frame,cv2.COLOR_GRAY2RGB)
-                
+ 
                 # Get bboxes if available
                 if 'bboxes' in data.keys():
                     bboxes = data['bboxes']
-                    
+ 
                     font = cv2.FONT_HERSHEY_SIMPLEX
                     fontScale              = 0.4
                     fontColor              = (255,255,0)
                     thickness              = 1
                     lineType               = 2
-                                   
+ 
                     # Draw bounding boxes
                     for b in bboxes.index:
-                                                    
+ 
                         box = bboxes.loc[[b]]
-                    
+ 
                         if box['confirmed'].item() != True:
                             continue
-                        
+ 
                         x,y = int(box['xtl'].item()),int(box['ytl'].item()),
                         w = int(box['xbr'].item()) - int(box['xtl'].item())
                         h = int(box['ybr'].item()) - int(box['ytl'].item())
-                        
+ 
                         # Scale coordinates
                         x = int(sf*x); y = int(sf*y); w = int(sf*w); h = int(sf*h)
-                        
+ 
                         frame = cv2.rectangle(frame,
                                               (x,y),
                                               (x+w,y+h),
                                               (255,255,0),1)
-                        
+ 
                         # Write score if it exists
                         if box['score'].item() != -99:
                             font = cv2.FONT_HERSHEY_SIMPLEX
@@ -645,47 +789,46 @@ class Imshow(RThread_R1):
                             fontColor              = (255,255,0)
                             thickness              = 1
                             lineType               = 2
-                            
-                            score = f'{box['score'].item():.2}'
-                            
+ 
+                            score = f"{box['score'].item():.2}"
+ 
                             cv2.putText(frame,
-                                        score, 
-                                        blxy, 
-                                        font, 
+                                        score,
+                                        blxy,
+                                        font,
                                         fontScale,
                                         fontColor,
                                         thickness,
                                         lineType)
-                            
+ 
                     # Write the number of persons in the upper left corner
                     num_persons = sum(bboxes['confirmed'] == True)
-                    
+ 
                     cv2.putText(frame,
-                                f'Number of persons: {num_persons}', 
-                                (0,20), 
-                                font, 
+                                f'Number of persons: {num_persons}',
+                                (0,20),
+                                font,
                                 fontScale,
                                 fontColor,
                                 thickness,
                                 lineType)
-
-                        
-                cv2.imshow(self.window_name,frame)
-                cv2.waitKey(1)
-            
+ 
+                self._gui.imshow(self.window_name,frame)                   # CHANGED
+                self._gui.waitKey(1)                                       # CHANGED
+ 
             else:
                 print('else')
                 pass
-
+ 
             # Signal that processing on this item in the read_buffer is done
             # self.read_buffer.task_done()
-
+ 
         # The opencv window needs to be closed inside the run function,
         # otherwise a window with the same name can never be opened until
         # the console is restarted
         if self._exit.is_set():
-            cv2.destroyWindow(self.window_name)
-            
+            self._gui.destroyWindow(self.window_name)                      # CHANGED
+ 
     def stop(self):
         self._exit.set()
 
@@ -719,7 +862,9 @@ class ImshowRecorder(Imshow):
         Parameters
         ----------
         name, read_buffer, ArrayType, SensorType, **kwargs :
-            As for Imshow (e.g. window_name=...).
+            As for Imshow (e.g. window_name=..., display=...). Pass a shared
+            ImshowDisplay as display= whenever several ImshowRecorder /
+            Imshow threads run at once (required on Linux).
         record_dir : str or Path
             Directory recordings are written to when start_recording() is
             called without a file path. Created if it does not exist.
@@ -867,13 +1012,14 @@ class ImshowRecorder(Imshow):
                 if self._rec_active:            # may have stopped meanwhile
                     self._rec_frames.append(entry)
  
-        # Show the recording state in the window title. Done here because
-        # HighGUI calls must come from the thread that owns the window.
+        # Show the recording state in the window title. Goes through
+        # self._gui like all window operations of Imshow: directly to cv2
+        # (this thread owns the window) or to the ImshowDisplay thread.
         if self._rec_active != self._rec_title_shown:
             self._rec_title_shown = self._rec_active
             title = f'{self.window_name}  [REC]' if self._rec_active else self.window_name
             try:
-                cv2.setWindowTitle(self.window_name, title)
+                self._gui.setWindowTitle(self.window_name, title)
             except cv2.error:
                 pass
  
@@ -893,9 +1039,9 @@ class ImshowRecorder(Imshow):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(part, 'wb') as f:
-                pkl.dump(meta, f, protocol=pkl.HIGHEST_PROTOCOL)
+                pickle.dump(meta, f, protocol=pickle.HIGHEST_PROTOCOL)
                 for frame in frames:
-                    pkl.dump(frame, f, protocol=pkl.HIGHEST_PROTOCOL)
+                    pickle.dump(frame, f, protocol=pickle.HIGHEST_PROTOCOL)
                     time.sleep(0)         # yield the GIL to the display thread
             part.replace(path)            # complete -> final name
             print(f"[{self.name}] Saved {meta['n_frames']} frames to {path} "
@@ -921,10 +1067,10 @@ def load_recording(path: Union[str, Path]) -> Tuple[dict, List[dict]]:
     """
     frames = []
     with open(path, 'rb') as f:
-        meta = pkl.load(f)
+        meta = pickle.load(f)
         while True:
             try:
-                frames.append(pkl.load(f))
+                frames.append(pickle.load(f))
             except EOFError:
                 break
     return meta, frames

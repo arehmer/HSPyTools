@@ -22,7 +22,7 @@ from queue import Queue, Full
 import argparse
 import time
 
-from hspy.ipc.threads import ImshowRecorder, USB_Client
+from hspy.ipc.threads import ImshowRecorder, ImshowDisplay, USB_Client
 from hspy.drivers.usb import USB_HTPA
 
 
@@ -49,6 +49,11 @@ if __name__ == '__main__':
     time.sleep(USB_HTPA.RELEASE_DELAY_S)
 
     #%% Create one driver, buffer, USB_Client and ImshowRecorder per device
+    # ONE thread for all cv2 windows: OpenCV's window functions are not
+    # thread-safe on Linux, so several Imshow threads must not call them
+    # directly. New windows are tiled across the screen.
+    display = ImshowDisplay(window_size=(640, 480), columns=3)
+
     usb_drivers = []
     usb_threads = []
     plot_threads = []
@@ -67,7 +72,7 @@ if __name__ == '__main__':
         buffers.append(usb_buffer)
 
         usb_threads.append(USB_Client(usb_driver=usb_driver,
-                                      stream_cmd = b't',
+                                      stream_cmd=b't',
                                       write_buffer=usb_buffer,
                                       name=f'usb_thread_{sn}'))
 
@@ -76,6 +81,7 @@ if __name__ == '__main__':
                                            read_buffer=usb_buffer,
                                            ArrayType=usb_driver.ArrayType,
                                            window_name=f'HTPA {sn}',
+                                           display=display,
                                            record_dir=args.record_dir))
 
     if not usb_threads:
@@ -83,6 +89,7 @@ if __name__ == '__main__':
 
     #%% Start threads
     print('Starting threads...')
+    display.start()
     for usb_thread, plot_thread in zip(usb_threads, plot_threads):
         usb_thread.start()
         plot_thread.start()
@@ -143,5 +150,9 @@ if __name__ == '__main__':
 
         for usb_driver in usb_drivers:
             usb_driver.close()
+
+        # Display thread last (closes the windows)
+        display.stop()
+        display.join(timeout=5)
 
         print("All threads stopped.")

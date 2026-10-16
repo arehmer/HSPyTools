@@ -13,7 +13,7 @@ Usage:
 from queue import Queue, Full
 import time
 
-from hspy.ipc.threads import Imshow, USB_Client
+from hspy.ipc.threads import Imshow, ImshowDisplay, USB_Client
 from hspy.drivers.usb import USB_HTPA
 
 
@@ -30,6 +30,11 @@ if __name__ == '__main__':
     time.sleep(USB_HTPA.RELEASE_DELAY_S)
 
     #%% Create one driver, buffer, USB_Client and Imshow thread per device
+    # ONE thread for all cv2 windows: OpenCV's window functions are not
+    # thread-safe on Linux, so several Imshow threads must not call them
+    # directly. New windows are tiled across the screen.
+    display = ImshowDisplay(window_size=(640, 480), columns=3)
+
     usb_drivers = []          # opened drivers, closed again at the end
     usb_threads = []
     plot_threads = []
@@ -63,13 +68,15 @@ if __name__ == '__main__':
         plot_threads.append(Imshow(name=f'imshow_thread_{sn}',
                                    read_buffer=usb_buffer,
                                    ArrayType=usb_driver.ArrayType,
-                                   window_name=f'HTPA {sn}'))
+                                   window_name=f'HTPA {sn}',
+                                   display=display))
 
     if not usb_threads:
         raise SystemExit("None of the devices could be opened!")
 
     #%% Start threads
     print('Starting threads...')
+    display.start()
     for usb_thread, plot_thread in zip(usb_threads, plot_threads):
         usb_thread.start()
         plot_thread.start()
@@ -107,5 +114,9 @@ if __name__ == '__main__':
         # Release the USB devices
         for usb_driver in usb_drivers:
             usb_driver.close()
+
+        # Display thread last (closes the windows)
+        display.stop()
+        display.join(timeout=5)
 
         print("All threads stopped.")
