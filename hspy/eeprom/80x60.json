@@ -1,0 +1,156 @@
+{
+	"EEPROM":
+	{
+		"CalibVersion": {
+            "dtype": "uint8",
+            "adr_start": " 0x23",
+            "adr_stop": " 0x23"},
+			
+		"ptatGrad_top": {
+            "dtype": "float32",
+            "adr_start": "0x24",
+            "adr_stop": "0x27"},
+
+        "ptatOffset_top": {
+            "dtype": "float32",
+            "adr_start": "0x28",
+            "adr_stop": "0x2B"},
+
+        "ptatGrad_bot": {
+            "dtype": "float32",
+            "adr_start": "0x34",
+            "adr_stop": "0x37"},
+
+        "ptatOffset_bot": {
+            "dtype": "float32",
+            "adr_start": "0x38",
+            "adr_stop": "0x3B"},
+
+        "tambAlpha": {
+            "dtype": "int16",
+            "adr_start": "0x27",
+            "adr_stop": "0x28"},
+
+        "tambBeta": {
+            "dtype": "int16",
+            "adr_start": "0x29",
+            "adr_stop": "0x2A"},
+
+        "tambGamma": {
+            "dtype": "int16",
+            "adr_start": "0x2B",
+            "adr_stop": "0x2C"},
+
+        "tambDelta": {
+            "dtype": "int16",
+            "adr_start": "0x2D",
+            "adr_stop": "0x2E"},
+
+        "dTambPtat_top": {
+            "dtype": "int16",
+            "adr_start": "0x37",
+            "adr_stop": "0x38"},
+
+        "tambPtatRef_top": {
+            "dtype": "uint16",
+            "adr_start": "0x39",
+            "adr_stop": "0x3A"},
+
+        "dTambVdd_top": {
+            "dtype": "int16",
+            "adr_start": "0x3B",
+            "adr_stop": "0x3C"},
+
+        "tambVddRef_top": {
+            "dtype": "uint16",
+            "adr_start": "0x3D",
+            "adr_stop": "0x3E"},
+
+        "dTambPtat_bot": {
+            "dtype": "int16",
+            "adr_start": "0x47",
+            "adr_stop": "0x48"},
+
+        "tambPtatRef_bot": {
+            "dtype": "uint16",
+            "adr_start": "0x49",
+            "adr_stop": "0x4A"},
+
+        "dTambVdd_bot": {
+            "dtype": "int16",
+            "adr_start": "0x4B",
+            "adr_stop": "0x4C"},
+
+        "tambVddRef_bot": {
+            "dtype": "uint16",
+            "adr_start": "0x4D",
+            "adr_stop": "0x4E"},
+
+        "dThPtat_top": {
+            "dtype": "int16",
+            "adr_start": "0x57",
+            "adr_stop": "0x58"},
+
+        "thPtatRef_top": {
+            "dtype": "uint16",
+            "adr_start": "0x59",
+            "adr_stop": "0x5A"},
+
+        "dThVdd_top": {
+            "dtype": "int16",
+            "adr_start": "0x5B",
+            "adr_stop": "0x5C"},
+
+        "thVddRef_top": {
+            "dtype": "uint16",
+            "adr_start": "0x5D",
+            "adr_stop": "0x5E"},
+
+        "dThPtat_bot": {
+            "dtype": "int16",
+            "adr_start": "0x67",
+            "adr_stop": "0x68"},
+
+        "thPtatRef_bot": {
+            "dtype": "uint16",
+            "adr_start": "0x69",
+            "adr_stop": "0x6A"},
+
+        "dThVdd_bot": {
+            "dtype": "int16",
+            "adr_start": "0x6B",
+            "adr_stop": "0x6C"},
+
+        "thVddRef_bot": {
+            "dtype": "uint16",
+            "adr_start": "0x6D",
+            "adr_stop": "0x6E"},
+			
+			
+		"vddCompGrad": {
+            "dtype": "int16",
+            "adr_start": "0x0550",
+            "adr_stop":  "0x2ACF"},
+
+        "vddCompOff": {
+            "dtype": "int16",
+            "adr_start": "0x2AD0",
+            "adr_stop":  "0x504F"},
+
+        "thGrad": {
+            "dtype": "int16",
+            "adr_start": "0x5050",
+            "adr_stop":  "0x75CF"},
+
+        "thOff": {
+            "dtype": "int16",
+            "adr_start": "0x75D0",
+            "adr_stop":  "0x9B4F"},
+
+        "pij": {
+            "dtype": "uint16",
+            "adr_start": "0x9B50",
+            "adr_stop":  "0xC0CF"}
+	
+	}
+}
