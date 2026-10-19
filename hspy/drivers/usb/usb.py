@@ -582,7 +582,7 @@ class USB_HTPA(USB_Driver):
         data = {'pix': frame[:n],
                 'aux': frame[n:],
                 'frame_raw': frame,
-                't': datetime.datetime.now(),
+                't': datetime.now(),
                 'serial_number': self.serial_number,
                 'ArrayType': self.ArrayType}
 

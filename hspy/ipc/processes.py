@@ -46,7 +46,7 @@ created inside _setup(), never in __init__.
 import time
 import socket
 import struct
-import datetime
+from datetime import datetime
 import signal
 import pickle as pkl
 from pathlib import Path
