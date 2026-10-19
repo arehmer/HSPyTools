@@ -1402,21 +1402,23 @@ class TPArray():
             DESCRIPTION.
 
         """
-        # Average PTATs separately: top = even, bot = odd indices
-        ptat_top = df_meas[self._PTAT][0::2].mean()
-        ptat_bot = df_meas[self._PTAT][1::2].mean()
+        # commented out due to new Ta calculation
+        
+        # # Average PTATs separately: top = even, bot = odd indices
+        # ptat_top = df_meas[self._PTAT][0::2].mean()
+        # ptat_bot = df_meas[self._PTAT][1::2].mean()
 
-        # Two separate grad/offset sets from the calibration
-        Tamb_top = ptat_top * self.BCC['ptatGrad_top'] + self.BCC['ptatOffset_top']
-        Tamb_bot = ptat_bot * self.BCC['ptatGrad_bot'] + self.BCC['ptatOffset_bot']
+        # # Two separate grad/offset sets from the calibration
+        # Tamb_top = ptat_top * self.BCC['ptatGrad_top'] + self.BCC['ptatOffset_top']
+        # Tamb_bot = ptat_bot * self.BCC['ptatGrad_bot'] + self.BCC['ptatOffset_bot']
 
-        # Mean of both temperatures
-        Tamb0 = (Tamb_top + Tamb_bot) / 2
+        # # Mean of both temperatures
+        # Tamb0 = (Tamb_top + Tamb_bot) / 2
 
-        dtype = df_meas.loc[self._T_amb].dtypes
-        df_meas.loc[self._T_amb] = Tamb0.astype(dtype)
+        # dtype = df_meas.loc[self._T_amb].dtypes
+        # df_meas.loc[self._T_amb] = Tamb0.astype(dtype)
 
-        return df_meas
+        # return df_meas
     
           
        
