@@ -681,7 +681,7 @@ class ImshowProcess(RProcess_R1):
         if 'pix_dK' in data.keys():
             frame = data['pix_dK']
         else:
-            print(data.keys())
+            # print(data.keys())
             frame = data['pix']
 
         # Reshape if not the proper size
