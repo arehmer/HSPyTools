@@ -1156,6 +1156,7 @@ class ImshowRecorderProcess(ImshowProcess):
         self.window_geometry = window_geometry
  
         # Parent -> child: ('start', path, t_start, meta) / ('stop', t_stop, discard)
+        #                  / ('clear_plot',)
         # Child -> parent: ('saved', path, n_frames) / ('failed', path, error)
         # Created here in the parent; multiprocessing queues are made to
         # cross the process boundary (unlike locks, sockets, devices).
@@ -1219,6 +1220,14 @@ class ImshowRecorderProcess(ImshowProcess):
             return None
         self._parent_pending += 1
         return self._parent_path
+ 
+    def clear_plot(self) -> None:
+        """
+        Clear the PTAT plot below the image (plot_ptat=True); the time axis
+        starts again at 0 with the next frame. Takes effect with the next
+        frame the child receives.
+        """
+        self._cmd_queue.put(('clear_plot',))
  
     def wait_until_saved(self, timeout: Optional[float] = None) -> List[tuple]:
         """
@@ -1346,6 +1355,12 @@ class ImshowRecorderProcess(ImshowProcess):
                     self._discard()
                 else:
                     self._save(t_stop)
+ 
+            elif cmd[0] == 'clear_plot':
+                # Plot and time origin belong to ImshowProcess (plot_ptat)
+                if hasattr(self, 'ptat_plot'):
+                    self.ptat_plot.clear()
+                    self._t_first = None
  
     def _discard(self):
         """Stop recording and throw the frames away."""
