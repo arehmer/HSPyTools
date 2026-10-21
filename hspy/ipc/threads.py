@@ -37,7 +37,7 @@ from hspy.drivers.i2c import I2C_HTPA32x32d
 from hspy.drivers.usb import USB_HTPA
 
 
-class USB_Client(WThread_R1):
+class USB_Client(threading.Thread):
     """
     Runs a USB_HTPA driver in its own thread: starts the device's frame
     stream and repeatedly puts acquired frames into write_buffer.
@@ -46,14 +46,20 @@ class USB_Client(WThread_R1):
     initialised) by the caller and handed in -- a thread shares the parent
     process's memory, so this is safe. The thread is the only one that
     talks to the device while it runs.
+ 
+    Losing the device (unplugged, cable fault, or no frame for lost_after_s
+    seconds) is reported ONCE; the thread then puts one final item
+    {'success': False, 'device_lost': True, ...} into write_buffer, sets
+    the device_lost event and ends. Other errors are printed once per
+    distinct message, not on every attempt.
     """
  
     def __init__(self,
-                 usb_driver : USB_HTPA,
+                 usb_driver,
                  write_buffer,
-                 stream_cmd: bytes = b'K',
+                 stream_cmd: bytes = b't',
                  name: str = 'usb_thread',
-                 **kwargs):
+                 lost_after_s: float = 5.0):
         """
         Parameters
         ----------
@@ -66,60 +72,103 @@ class USB_Client(WThread_R1):
             values in dK, which end up in result['pix_dK'].
         name : str
             Thread name.
+        lost_after_s : float
+            If no frame could be read for this long (only errors), the
+            device is considered lost even if the driver did not report a
+            disconnect.
         """
  
-
+        # NOTE: Thread.__init__ stores its `target` argument in
+        # self._target. Without passing our own _target method here, it
+        # would overwrite it with None and self._target() in run() would
+        # fail with "'NoneType' object is not callable" (same as in
+        # WProcess_R1).
+        super().__init__(name=name, target=self._target, daemon=True)
+ 
         self.usb_driver = usb_driver
         self.write_buffer = write_buffer
         self.stream_cmd = stream_cmd
-        
-        # Set image_id counter
-        self.image_id = 0
-        
-        super().__init__(name=name, 
-                         write_buffer = write_buffer,
-                         **kwargs)
+        self.lost_after_s = lost_after_s
  
+        self._exit = threading.Event()
+ 
+        # Set when the device is lost; check with usb_thread.device_lost.is_set()
+        self.device_lost = threading.Event()
  
     # ── Thread body ──────────────────────────────────────────────────────────
  
-    # def run(self):
-    #     self._setup()
-    #     try:
-    #         while not self._exit.is_set():
-    #             result = self._target()
-    #             self._put(result)
-    #     finally:
-    #         self._teardown()
+    def run(self):
+        try:
+            if not self._setup():
+                return
+            while not self._exit.is_set() and not self.device_lost.is_set():
+                result = self._target()
+                self._put(result)
+        finally:
+            self._teardown()
  
-    def _setup(self):
- 
-        # Start continuous frame stream
-        resp = self.usb_driver.start_stream(self.stream_cmd)
-        print(f"[{self.name}] Stream started: {resp!r}")
+    def _setup(self) -> bool:
  
         # Set image_id counter
         self.image_id = 0
  
+        # Error bookkeeping: print each distinct error once
+        self._last_error = None
+        self._n_errors = 0
+ 
+        # Start continuous frame stream
+        try:
+            resp = self.usb_driver.start_stream(self.stream_cmd)
+        except Exception as e:
+            self._device_lost(f"could not start the stream: {e}")
+            self._put(self._lost_item())
+            return False
+        print(f"[{self.name}] Stream started: {resp!r}")
+ 
         # Set time
         self.t0 = time.time()
+        self._t_last_frame = time.monotonic()
+        return True
  
     def _target(self):
- 
-        # Dictionary for storing results in
-        result = {}
  
         try:
             # Acquire one frame from the stream
             data = self.usb_driver.acquire_frame()
  
-            # Set success flag and store frame data
-            result['success'] = True
-            result.update(data)
         except Exception as e:
-            # Set success flag to False in case of failure
-            result['success'] = False
-            print(f"[{self.name}] {e}")
+ 
+            # Device gone, or errors only for too long: report once, hand a
+            # final 'device_lost' item to the consumer, end the loop
+            if not self.usb_driver.is_connected:
+                self._device_lost(str(e))
+                return self._lost_item()
+            if time.monotonic() - self._t_last_frame > self.lost_after_s:
+                self._device_lost(f"no frame for {self.lost_after_s:g} s "
+                                  f"(last error: {e})")
+                return self._lost_item()
+ 
+            # Other errors: print each distinct message once, don't spin
+            self._n_errors += 1
+            message = str(e)
+            if message != self._last_error:
+                print(f"[{self.name}] {message}")
+                self._last_error = message
+            time.sleep(0.05)
+ 
+            result = {'success': False}
+ 
+        else:
+            if self._n_errors:
+                print(f"[{self.name}] Receiving frames again "
+                      f"({self._n_errors} failed attempt(s) before).")
+                self._n_errors = 0
+                self._last_error = None
+            self._t_last_frame = time.monotonic()
+ 
+            # Set success flag and store frame data
+            result = {'success': True}
+            result.update(data)
  
         # Store image_id
         result['image_id'] = self.image_id
@@ -129,39 +178,43 @@ class USB_Client(WThread_R1):
  
         return result
  
-    # def _teardown(self):
-    #     # Stop the stream from inside this thread, so the device is never
-    #     # accessed from two threads at once. Closing the driver is left to
-    #     # whoever created it (same ownership as with I2C_Client).
-    #     if self.usb_driver.is_streaming:
-    #         try:
-    #             resp, _ = self.usb_driver.stop_stream()
-    #             print(f"[{self.name}] Stream stopped: {resp!r}")
-    #         except Exception as e:
-    #             print(f"[{self.name}] Stopping stream failed: {e}")
-    
-    
-    def _teardown(self):
-        # Runs inside the child process once the loop has exited: stop the
-        # stream and release the device (close() stops the stream itself if
-        # it is still running).
-        usb_driver = getattr(self, 'usb_driver', None)
-        if usb_driver is not None:
-            usb_driver.close()    
+    def _device_lost(self, reason: str):
+        """Report the loss once and flag it (ends the loop in run())."""
+        print(f"[{self.name}] Connection to device {self.usb_driver.serial_number} "
+              f"LOST: {reason}. Continuing without it.")
+        self.device_lost.set()
  
-    # def _put(self, result):
-    #     # Never block the USB loop on a slow consumer: if the buffer is full,
-    #     # replace the oldest frame with the newest one. A blocked loop would
-    #     # stop reading the bulk endpoint while the device keeps streaming.
-    #     while not self._exit.is_set():
-    #         try:
-    #             self.write_buffer.put_nowait(result)
-    #             return
-    #         except queue.Full:
-    #             try:
-    #                 self.write_buffer.get_nowait()
-    #             except queue.Empty:
-    #                 pass
+    def _lost_item(self) -> dict:
+        """Final item for the consumer: tells it that no more frames come."""
+        return {'success': False,
+                'device_lost': True,
+                'serial_number': self.usb_driver.serial_number,
+                'image_id': self.image_id}
+ 
+    def _teardown(self):
+        # Stop the stream from inside this thread, so the device is never
+        # accessed from two threads at once. Closing the driver is left to
+        # whoever created it (same ownership as with I2C_Client).
+        if self.usb_driver.is_streaming and self.usb_driver.is_connected:
+            try:
+                resp, _ = self.usb_driver.stop_stream()
+                print(f"[{self.name}] Stream stopped: {resp!r}")
+            except Exception as e:
+                print(f"[{self.name}] Stopping stream failed: {e}")
+ 
+    def _put(self, result):
+        # Never block the USB loop on a slow consumer: if the buffer is full,
+        # replace the oldest frame with the newest one. A blocked loop would
+        # stop reading the bulk endpoint while the device keeps streaming.
+        while not self._exit.is_set():
+            try:
+                self.write_buffer.put_nowait(result)
+                return
+            except queue.Full:
+                try:
+                    self.write_buffer.get_nowait()
+                except queue.Empty:
+                    pass
  
     def stop(self):
         # The loop notices within one frame-read timeout (300 ms by default)

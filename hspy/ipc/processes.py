@@ -79,14 +79,21 @@ class USB_ClientProcess(WProcess_R1):
     Multiprocessing version of USB_Client. Runs a USB_HTPA driver in its own
     process, starts the device's frame stream and writes acquired frames
     into write_buffer.
+ 
+    Losing the device (unplugged, cable fault, or no frame for lost_after_s
+    seconds) is reported ONCE; the process then puts one final item
+    {'success': False, 'device_lost': True, ...} into write_buffer, sets
+    the device_lost event (readable from the parent) and ends. Other
+    errors are printed once per distinct message, not on every attempt.
     """
-
+ 
     def __init__(self,
                  usb_driver_cls,
                  usb_driver_kwargs: dict,
                  write_buffer,
-                 stream_cmd: bytes = b'K',
+                 stream_cmd: bytes = b't',
                  name: str = 'usb_process',
+                 lost_after_s: float = 5.0,
                  **kwargs):
         """
         Parameters
@@ -107,71 +114,163 @@ class USB_ClientProcess(WProcess_R1):
         name : str
             Process name. Give each process a distinct name when running
             several devices.
-
+        lost_after_s : float
+            If no frame could be read for this long (only errors), the
+            device is considered lost even if the driver did not report a
+            disconnect (e.g. some Windows USB errors after unplugging).
+ 
         Returns
         -------
         None.
-
+ 
         """
-
+ 
         self.usb_driver_cls = usb_driver_cls
         self.usb_driver_kwargs = usb_driver_kwargs
         self.stream_cmd = stream_cmd
-
+        self.lost_after_s = lost_after_s
+ 
+        # Set by the child when the device is lost; check it in the parent
+        # with usb_process.device_lost.is_set()
+        self.device_lost = MPEvent()
+ 
         super().__init__(name=name,
                          write_buffer=write_buffer,
                          **kwargs)
-
+ 
     def _setup(self):
-
-        # Opens the USB device here, inside the child process.
-        # USB_HTPA.__init__ already calls open() + init() itself.
-        self.usb_driver = self.usb_driver_cls(**self.usb_driver_kwargs)
-
-        # Start continuous frame stream
-        resp = self.usb_driver.start_stream(self.stream_cmd)
-        print(f"[{self.name}] Stream started: {resp!r}")
-
+ 
+        # Ignore Ctrl+C in this process. On Windows Ctrl+C is delivered to
+        # every process attached to the console, not only the parent. A
+        # KeyboardInterrupt here would abort the loop in the middle of a USB
+        # read, skip _teardown() and leave the device streaming. Instead the
+        # parent catches Ctrl+C and calls stop(); the loop then exits after
+        # the current frame and _teardown() stops the stream properly.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+ 
         # Set image_id counter
         self.image_id = 0
-
+ 
+        # Error bookkeeping: print each distinct error once
+        self._last_error = None
+        self._n_errors = 0
+ 
+        # Opens the USB device here, inside the child process.
+        # USB_HTPA.__init__ already calls open() + init() itself (init()
+        # first stops a stream a previous run may have left running).
+        self.usb_driver = None
+        try:
+            self.usb_driver = self.usb_driver_cls(**self.usb_driver_kwargs)
+ 
+            # Start continuous frame stream
+            resp = self.usb_driver.start_stream(self.stream_cmd)
+            print(f"[{self.name}] Stream started: {resp!r}")
+        except Exception as e:
+            # Device gone / not usable: report once and end the process
+            # (the loop in run() does not start because _exit is set)
+            self._device_lost(f"could not start the device: {e}")
+            self.write_buffer.put(self._lost_item())
+            return
+ 
         # Set time
         self.t0 = time.time()
-
+        self._t_last_frame = time.monotonic()
+ 
     def _target(self):
-
-        # Dictionary for storing results in
-        result = {}
-
+ 
         try:
             # Acquire one frame from the stream
             data = self.usb_driver.acquire_frame()
-
-            # Set success flag and store frame data
-            result['success'] = True
-            result.update(data)
+ 
         except Exception as e:
-            # Set success flag to False in case of failure
-            result['success'] = False
-            print(f"[{self.name}] {e}")
-
+ 
+            # Device gone: report once, hand a final 'device_lost' item to
+            # the consumer and end the loop
+            if not self.usb_driver.is_connected:
+                self._device_lost(str(e))
+                return self._lost_item()
+ 
+            # Errors only, for too long: treat as lost as well
+            if time.monotonic() - self._t_last_frame > self.lost_after_s:
+                self._device_lost(f"no frame for {self.lost_after_s:g} s "
+                                  f"(last error: {e})")
+                return self._lost_item()
+ 
+            # Other errors (timeout, sync error, ...): print each distinct
+            # message once, and don't spin if the error comes back at once
+            self._n_errors += 1
+            message = str(e)
+            if message != self._last_error:
+                print(f"[{self.name}] {message}")
+                self._last_error = message
+            time.sleep(0.05)
+ 
+            result = {'success': False}
+ 
+        else:
+            if self._n_errors:
+                print(f"[{self.name}] Receiving frames again "
+                      f"({self._n_errors} failed attempt(s) before).")
+                self._n_errors = 0
+                self._last_error = None
+            self._t_last_frame = time.monotonic()
+ 
+            # Set success flag and store frame data
+            result = {'success': True}
+            result.update(data)
+ 
         # Store image_id
         result['image_id'] = self.image_id
-
+ 
         # Increment image_id
         self.image_id = self.image_id + 1
-
+ 
         return result
-
+ 
+    def _device_lost(self, reason: str):
+        """Report the loss once, flag it for the parent, end the loop."""
+        serial = self.usb_driver_kwargs.get('serial_number', '?')
+        print(f"[{self.name}] Connection to device {serial} LOST: {reason}. "
+              f"Continuing without it.")
+        self.device_lost.set()
+        self._exit.set()
+ 
+    def _lost_item(self) -> dict:
+        """Final item for the consumer: tells it that no more frames come."""
+        return {'success': False,
+                'device_lost': True,
+                'serial_number': self.usb_driver_kwargs.get('serial_number'),
+                'image_id': self.image_id}
+ 
     def _teardown(self):
         # Runs inside the child process once the loop has exited: stop the
-        # stream and release the device (close() stops the stream itself if
-        # it is still running).
+        # stream and release the device. The loop only exits if the process
+        # is not blocked in write_buffer.put() - so stop this producer
+        # BEFORE its consumer (see usb-imshow-mp.py).
+        self._release_device()
+ 
+    def _release_device(self):
         usb_driver = getattr(self, 'usb_driver', None)
-        if usb_driver is not None:
+        if usb_driver is None:
+            return
+        self.usb_driver = None            # release only once
+        if usb_driver.is_streaming and usb_driver.is_connected:
+            try:
+                resp, leftovers = usb_driver.stop_stream()
+                print(f"[{self.name}] Stream stopped: {resp!r} "
+                      f"({len(leftovers)} leftover frames discarded)")
+            except Exception as e:
+                print(f"[{self.name}] Stopping stream failed: {e}")
+        try:
             usb_driver.close()
-
+            print(f"[{self.name}] Device released.")
+        except Exception as e:
+            print(f"[{self.name}] Releasing device failed: {e}")
+ 
     def stop(self):
+        # Only signals the child (this runs in the parent). The child's loop
+        # exits after the current frame and _teardown() stops the stream.
+        # Never terminate() this process, or the device keeps streaming.
         self._exit.set()
 
 class UDP_ClientProcess(WProcess_R1):
@@ -787,6 +886,46 @@ class _RecordingTap:
         return getattr(self._buffer, attr)
  
  
+class _RecordingTap:
+    """
+    Stands in for read_buffer inside the child process: forwards get() to
+    the real buffer and hands every item to a callback before returning it.
+    Lets ImshowRecorderProcess reuse ImshowProcess._target() unchanged.
+    All other attributes are forwarded to the real buffer.
+ 
+    get() without arguments waits in slices of poll_s and calls on_idle()
+    in between, so commands are handled and the window stays responsive
+    even when no frames arrive (e.g. the device was lost). If exit_event is
+    set while waiting, queue.Empty is raised, which RProcess_R1.run()
+    treats as "nothing to do" -- its loop then sees the exit flag and ends.
+    """
+ 
+    def __init__(self, buffer, on_item, on_idle=None, exit_event=None, poll_s=0.2):
+        self._buffer = buffer
+        self._on_item = on_item
+        self._on_idle = on_idle
+        self._exit_event = exit_event
+        self._poll_s = poll_s
+ 
+    def get(self, *args, **kwargs):
+        if args or kwargs or self._on_idle is None:
+            item = self._buffer.get(*args, **kwargs)
+        else:
+            while True:
+                try:
+                    item = self._buffer.get(timeout=self._poll_s)
+                    break
+                except queue.Empty:
+                    self._on_idle()
+                    if self._exit_event is not None and self._exit_event.is_set():
+                        raise
+        self._on_item(item)
+        return item
+ 
+    def __getattr__(self, attr):
+        return getattr(self._buffer, attr)
+ 
+ 
 class ImshowRecorderProcess(ImshowProcess):
     """
     ImshowProcess with recording. Displays every frame exactly like
@@ -969,16 +1108,28 @@ class ImshowRecorderProcess(ImshowProcess):
         self._rec_t_start: Optional[datetime] = None
         self._rec_meta: dict = {}
         self._rec_writers: List[threading.Thread] = []
-        self._rec_title_shown = False
+        self._rec_title_shown = None
+        self._rec_device_lost = False      # device lost during the current recording
+        self._device_lost = False          # upstream reported that its device is gone
  
         # Every item ImshowProcess._target() gets from the buffer passes
-        # through _on_frame() first
-        self.read_buffer = _RecordingTap(self.read_buffer, self._on_frame)
+        # through _on_frame() first; while no items arrive, _on_idle() runs
+        # every 0.2 s
+        self.read_buffer = _RecordingTap(self.read_buffer, self._on_frame,
+                                         on_idle=self._on_idle,
+                                         exit_event=self._exit)
  
     def _on_frame(self, data):
         """Called by _RecordingTap for every item, before it is displayed."""
  
         self._poll_commands()
+ 
+        if isinstance(data, dict) and data.get('device_lost'):
+            if not self._device_lost:
+                self._device_lost = True
+                print(f"[{self.name}] Device lost - the window shows the last frame.")
+            if self._rec_active:
+                self._rec_device_lost = True
  
         if self._rec_active and isinstance(data, dict) and data.get('success') is True:
             # Only a shallow copy of the dict: arrays are referenced, not
@@ -986,6 +1137,15 @@ class ImshowRecorderProcess(ImshowProcess):
             self._rec_frames.append(self._select_keys(data))
  
         self._update_title()
+ 
+    def _on_idle(self):
+        """Called by _RecordingTap while no item arrives."""
+        self._poll_commands()
+        self._update_title()
+        try:
+            cv2.waitKey(1)                 # keep the window responsive
+        except cv2.error:
+            pass
  
     def _poll_commands(self):
         while True:
@@ -1002,8 +1162,13 @@ class ImshowRecorderProcess(ImshowProcess):
                 self._rec_path = Path(path)
                 self._rec_t_start = t_start
                 self._rec_meta = meta
+                self._rec_device_lost = self._device_lost
                 self._rec_active = True
-                print(f"[{self.name}] Recording started -> {path}")
+                if self._device_lost:
+                    print(f"[{self.name}] Recording started, but the device is lost: "
+                          f"the file will contain no frames -> {path}")
+                else:
+                    print(f"[{self.name}] Recording started -> {path}")
  
             elif cmd[0] == 'stop':
                 _, t_stop, discard = cmd
@@ -1035,7 +1200,8 @@ class ImshowRecorderProcess(ImshowProcess):
                 'tparray_npsize': getattr(self.tparray, '_npsize', None),
                 't_start': self._rec_t_start,
                 't_stop': t_stop,
-                'n_frames': len(frames)}
+                'n_frames': len(frames),
+                'device_lost': self._rec_device_lost}   # True: frames stop early
  
         print(f"[{self.name}] Recording stopped: {len(frames)} frames, "
               f"writing {self._rec_path} ...")
@@ -1072,10 +1238,15 @@ class ImshowRecorderProcess(ImshowProcess):
             self._status_queue.put(('failed', str(path), str(e)))
  
     def _update_title(self):
-        # Show the recording state in the window title
-        if self._rec_active != self._rec_title_shown:
-            self._rec_title_shown = self._rec_active
-            title = f'{self.window_name}  [REC]' if self._rec_active else self.window_name
+        # Show the recording / connection state in the window title
+        state = (self._rec_active, self._device_lost)
+        if state != self._rec_title_shown:
+            self._rec_title_shown = state
+            title = self.window_name
+            if self._device_lost:
+                title += '  [DISCONNECTED]'
+            if self._rec_active:
+                title += '  [REC]'
             try:
                 cv2.setWindowTitle(self.window_name, title)
             except cv2.error:

@@ -32,6 +32,7 @@ Dependencies:
     pip install pyusb libusb-package
 """
 
+import errno
 import re
 import struct
 import sys
@@ -53,12 +54,12 @@ _VID       = 0x32A7
 _PID       = 0x0003
 _LANGID_EN = 0x0409   # English, used to read the serial-number string
 _INTERFACE = 0
+_LIBUSB_ERROR_NO_DEVICE = -4   # libusb: "No such device (it may have been disconnected)"
 
 # ── Device commands (ASCII) ──────────────────────────────────────────────────
 _CMD_VERSION      = b'v'                    # firmware version string
 _CMD_CONFIG       = b'G'                    # configuration string ("... Arraytype N ...")
 _CMD_STREAM_DK    = b'K'                    # start stream, pixel values in dK
-_CMD_STREAM_V     = b't'                    # start stream, pixel values in digits
 _CMD_STREAM_STOP  = b'x'                    # stop stream, device answers "STOP!"
 _CMD_CALIB_READ   = b'n'                    # dump calibration data
 _CMD_CALIB_WRITE  = b'Set EEPROM data\r\n'  # enter calibration-write mode
@@ -91,6 +92,8 @@ _T_FLUSH_MS       = 50     # flush_input(): stop once nothing arrived for this l
 _T_IDLE_MS        = 500    # reset(): silence that proves the stream is stopped
                            # (must be longer than the frame interval of the device)
 _T_FLUSH_MAX_S    = 5.0    # flush_input(): give up if data keeps coming for this long
+_T_STOP_ATTEMPT_S = 2.0    # reset(): time per stop attempt before re-sending the stop command
+_N_STOP_ATTEMPTS  = 3      # reset(): stop attempts before giving up
 _T_RETRY_S        = 0.3    # delay between USB retries
 _N_SET_CONFIG     = 5      # set_configuration() attempts
 _N_READ_SN        = 3      # serial-number read attempts
@@ -105,6 +108,12 @@ class USB_Driver:
 # ─────────────────────────────────────────────────────────────────────────────
 class USB_HTPAError(Exception):
     """Raised on USB communication or data errors."""
+
+
+class USB_HTPADisconnected(USB_HTPAError):
+    """The device is gone (unplugged, powered off, cable fault). Every
+    further access fails the same way; open a new driver once the device is
+    back."""
 
 
 class USB_HTPATimeout(USB_HTPAError):
@@ -174,6 +183,7 @@ class USB_HTPA(USB_Driver):
         # Receive buffer for the stream: bytes read from USB but not yet
         # returned as part of a frame (keeps the stream frame-aligned).
         self._rx = bytearray()
+        self._disconnected = False     # set once libusb reports the device as gone
         self._streaming = False
         self._stream_cmd: Optional[bytes] = None
 
@@ -212,6 +222,11 @@ class USB_HTPA(USB_Driver):
     @property
     def is_open(self) -> bool:
         return self._dev is not None
+
+    @property
+    def is_connected(self) -> bool:
+        """False once a read or write reported that the device is gone."""
+        return self._dev is not None and not self._disconnected
 
     @property
     def is_streaming(self) -> bool:
@@ -304,7 +319,7 @@ class USB_HTPA(USB_Driver):
         """Stop a running stream, then release the device."""
         if self._dev is None:
             return
-        if self._streaming:
+        if self._streaming and not self._disconnected:   # a lost device can't be stopped
             try:
                 self.stop_stream()
             except Exception as e:
@@ -329,7 +344,7 @@ class USB_HTPA(USB_Driver):
 
     # ── High-level public API ────────────────────────────────────────────────
 
-    def init(self, reset: bool = False) -> None:
+    def init(self, reset: bool = True) -> None:
         """
         Initialise the driver:
           1. Put the device into command mode (reset(), optional).
@@ -396,16 +411,25 @@ class USB_HTPA(USB_Driver):
 
     # ── Stream control ───────────────────────────────────────────────────────
 
-    def reset(self, idle_ms: int = _T_IDLE_MS) -> int:
+    def reset(self,
+              idle_ms: int = _T_IDLE_MS,
+              attempts: int = _N_STOP_ATTEMPTS,
+              attempt_s: float = _T_STOP_ATTEMPT_S) -> int:
         """
         Put the device into command mode, whatever state it is in.
 
-        A program that was killed while streaming (e.g. Ctrl+C on Windows,
-        which interrupts child processes before they can stop the stream)
-        leaves the device streaming. Commands sent in that state are answered
-        with frame data instead of text. reset() sends the stop command and
-        discards everything (frames, "STOP!", any other reply) until the
-        device has been silent for idle_ms.
+        A program that was killed while streaming leaves the device
+        streaming. Commands sent in that state are answered with frame data
+        instead of text. reset() sends the stop command and discards
+        everything (frames, "STOP!", any other reply) until the device has
+        been silent for idle_ms. If data keeps coming, the stop command is
+        sent again (up to `attempts` times).
+
+        Before that, both endpoints are reset (clear_halt). If a process was
+        killed in the middle of a transfer, host and device can disagree on
+        the USB data toggle; the device then acknowledges but silently drops
+        the next packet it receives - which would be the stop command.
+        clear_halt resets the toggle on both sides.
 
         Returns the number of bytes discarded.
         """
@@ -413,11 +437,25 @@ class USB_HTPA(USB_Driver):
         self._stream_cmd = None
         self._rx.clear()
 
-        self.write(_CMD_STREAM_STOP)
-        n = self.flush_input(quiet_ms=idle_ms)
-        if n:
-            print(f"[{self.serial_number}] reset: discarded {n} bytes of pending data")
-        return n
+        self._clear_halt(self._ep_out, self._ep_in)
+
+        discarded = 0
+        for attempt in range(1, attempts + 1):
+            self.write(_CMD_STREAM_STOP)
+            n, quiet = self._drain(quiet_ms=idle_ms, max_s=attempt_s)
+            discarded += n
+            if quiet:
+                if discarded:
+                    print(f"[{self.serial_number}] reset: discarded {discarded} bytes "
+                          f"of pending data (stop attempt {attempt})")
+                return discarded
+            print(f"[{self.serial_number}] reset: device still streaming after stop "
+                  f"attempt {attempt}/{attempts}")
+            self._clear_halt(self._ep_out)
+
+        raise USB_HTPAError(
+            f"Device keeps streaming after {attempts} stop attempts "
+            f"({discarded} bytes discarded). Unplug and reconnect the device.")
 
     def start_stream(self,
                      cmd: Union[bytes, str] = _CMD_STREAM_DK,
@@ -473,7 +511,7 @@ class USB_HTPA(USB_Driver):
         self.write(cmd)
         self._streaming = False
         self._stream_cmd = None
-        
+
         # Collect everything until "STOP" shows up (frames still in flight
         # and the response may arrive in the same transfer)
         deadline = time.monotonic() + timeout_ms / 1e3
@@ -481,17 +519,15 @@ class USB_HTPA(USB_Driver):
         while True:
             remaining_ms = int((deadline - time.monotonic()) * 1e3)
             if remaining_ms <= 0:
-                print("Did not receive a 'STOP!' response by the USB device!")
                 break
             try:
                 self._rx += self.read(self._mps * _MAX_BULK_PACKETS, remaining_ms)
             except USB_HTPATimeout:
-                print('USB device timed out upon trying to stop stream!')
                 break
             stop_idx = self._rx.rfind(_RESP_STOP)
             if stop_idx >= 0:
                 break
-            
+
         if stop_idx >= 0:
             payload = bytes(self._rx[:stop_idx])
             response = self._rx[stop_idx:].decode('utf-8', errors='replace').strip()
@@ -692,7 +728,7 @@ class USB_HTPA(USB_Driver):
         except usb.core.USBTimeoutError as e:
             raise USB_HTPATimeout(f"USB write timed out: {e}") from e
         except usb.core.USBError as e:
-            raise USB_HTPAError(f"USB write error: {e}") from e
+            raise self._usb_error(e, 'write') from e
 
     def read(self, size: int = _MAX_RESP_BYTES, timeout_ms: Optional[int] = None) -> bytes:
         """Read up to `size` raw bytes from the IN endpoint."""
@@ -703,7 +739,15 @@ class USB_HTPA(USB_Driver):
         except usb.core.USBTimeoutError as e:
             raise USB_HTPATimeout(f"No data within {t} ms") from e
         except usb.core.USBError as e:
-            raise USB_HTPAError(f"USB read error: {e}") from e
+            raise self._usb_error(e, 'read') from e
+
+    def _usb_error(self, e: 'usb.core.USBError', what: str) -> USB_HTPAError:
+        """Translate a pyusb error; a vanished device becomes USB_HTPADisconnected."""
+        if (getattr(e, 'backend_error_code', None) == _LIBUSB_ERROR_NO_DEVICE
+                or getattr(e, 'errno', None) == errno.ENODEV):
+            self._disconnected = True
+            return USB_HTPADisconnected(f"Device disconnected ({what}): {e}")
+        return USB_HTPAError(f"USB {what} error: {e}")
 
     def read_text(self, timeout_ms: Optional[int] = None) -> str:
         """Read one text response without sending anything first."""
@@ -728,6 +772,16 @@ class USB_HTPA(USB_Driver):
         Raises USB_HTPAError if data keeps arriving for max_s (the device is
         still streaming).
         """
+        n, quiet = self._drain(quiet_ms, max_s)
+        if quiet:
+            return n
+        raise USB_HTPAError(
+            f"Input did not go quiet within {max_s} s ({n} bytes discarded) - "
+            f"device still streaming?")
+
+    def _drain(self, quiet_ms: int, max_s: float) -> Tuple[int, bool]:
+        """Discard input until nothing arrived for quiet_ms, at most max_s.
+        Returns (bytes discarded, True if the input went quiet)."""
         n = len(self._rx)
         self._rx.clear()
         deadline = time.monotonic() + max_s
@@ -735,10 +789,8 @@ class USB_HTPA(USB_Driver):
             try:
                 n += len(self.read(self._mps * _MAX_BULK_PACKETS, quiet_ms))
             except USB_HTPATimeout:
-                return n
-        raise USB_HTPAError(
-            f"Input did not go quiet within {max_s} s ({n} bytes discarded) - "
-            f"device still streaming?")
+                return n, True
+        return n, False
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
