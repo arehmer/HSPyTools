@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
 import queue
 from multiprocessing import Queue as MPQueue
+from multiprocessing import Event as MPEvent
 import threading
 
 import cv2
