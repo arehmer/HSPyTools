@@ -63,6 +63,7 @@ from hspy.LuT import LuT
 from hspytools.tparray import TPArray
 
 from hspy.ipc.processes_base import WProcess_R1, RProcess_R1, RWProcess_R1
+from hspy.ipc.plot_utils import TimeSeriesPlot
 
 
 # Same wire-format constants as UDP_PickleServer / UDP_PickleClient in
@@ -882,7 +883,16 @@ class ImshowProcess(RProcess_R1):
                  ArrayType: int = None,
                  SensorType: int = None,
                  window_name: str = 'Sensor stream',
+                 plot_ptat: bool = False,                                # ADDED
+                 plot_window_s: float = None,                            # ADDED
                  **kwargs):
+        """
+        plot_ptat     : if True, a line plot of data['ptat_avg'] over time is
+                        drawn below the image (in the same window).   # ADDED
+        plot_window_s : show only the last plot_window_s seconds in that
+                        plot; None (default) shows everything since the
+                        start.                                        # ADDED
+        """
 
         if ArrayType is None and SensorType is not None:
             self._tparray_kwargs = {'SensorType': SensorType}
@@ -892,6 +902,8 @@ class ImshowProcess(RProcess_R1):
             raise Exception('Either ArrayType or SensorType must be provided.')
 
         self.window_name = window_name
+        self.plot_ptat = plot_ptat                                       # ADDED
+        self.plot_window_s = plot_window_s                               # ADDED
 
         super().__init__(name=name,
                          read_buffer=read_buffer,
@@ -906,6 +918,11 @@ class ImshowProcess(RProcess_R1):
 
         self.t0 = time.time()
 
+        # PTAT history, kept in this process                             # ADDED
+        self.ptat_plot = TimeSeriesPlot(title='PTAT avg', unit='digits', # ADDED
+                                        window_s=self.plot_window_s)     # ADDED
+        self._t_first = None                                             # ADDED
+
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
 
     def _target(self):
@@ -913,14 +930,13 @@ class ImshowProcess(RProcess_R1):
         # Get result from upstream process
         data = self.read_buffer.get()
 
-        if data['success'] is not True:
-            return
-
         if 'pix_dK' in data.keys():
             frame = data['pix_dK']
         else:
             # print(data.keys())
             frame = data['pix']
+
+        frame = data['pix_dK']
 
         # Reshape if not the proper size
         if frame.ndim == 1:
@@ -984,8 +1000,25 @@ class ImshowProcess(RProcess_R1):
                         f'Number of persons: {num_persons}',
                         (0, 20), font, fontScale, fontColor, thickness, lineType)
 
+        # PTAT plot below the image                                      # ADDED
+        if self.plot_ptat:                                               # ADDED
+            frame = self._add_ptat_plot(frame, data)                     # ADDED
+
         cv2.imshow(self.window_name, frame)
         cv2.waitKey(1)
+
+    def _add_ptat_plot(self, frame, data):                               # ADDED
+        """Append data['ptat_avg'] to the history and stack the plot
+        below the image. The plot is a third of the image's height."""
+        if 'ptat_avg' in data:
+            # Time axis: seconds since the first frame, from the frame's
+            # own timestamp if it has one
+            t = data['t'].timestamp() if hasattr(data.get('t'), 'timestamp') else time.time()
+            if self._t_first is None:
+                self._t_first = t
+            self.ptat_plot.add(t - self._t_first, data['ptat_avg'])
+        panel = self.ptat_plot.render(frame.shape[1], frame.shape[0] // 3)
+        return np.vstack([frame, panel])
 
     def _teardown(self):
         # Window is destroyed here, inside the child process, once the
