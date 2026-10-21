@@ -80,19 +80,19 @@ class USB_ClientProcess(WProcess_R1):
     Multiprocessing version of USB_Client. Runs a USB_HTPA driver in its own
     process, starts the device's frame stream and writes acquired frames
     into write_buffer.
- 
+
     Losing the device (unplugged, cable fault, or no frame for lost_after_s
     seconds) is reported ONCE; the process then puts one final item
     {'success': False, 'device_lost': True, ...} into write_buffer, sets
     the device_lost event (readable from the parent) and ends. Other
     errors are printed once per distinct message, not on every attempt.
     """
- 
+
     def __init__(self,
                  usb_driver_cls,
                  usb_driver_kwargs: dict,
                  write_buffer,
-                 stream_cmd: bytes = b't',
+                 stream_cmd: bytes = b'K',
                  name: str = 'usb_process',
                  lost_after_s: float = 5.0,
                  **kwargs):
@@ -119,28 +119,28 @@ class USB_ClientProcess(WProcess_R1):
             If no frame could be read for this long (only errors), the
             device is considered lost even if the driver did not report a
             disconnect (e.g. some Windows USB errors after unplugging).
- 
+
         Returns
         -------
         None.
- 
+
         """
- 
+
         self.usb_driver_cls = usb_driver_cls
         self.usb_driver_kwargs = usb_driver_kwargs
         self.stream_cmd = stream_cmd
         self.lost_after_s = lost_after_s
- 
+
         # Set by the child when the device is lost; check it in the parent
         # with usb_process.device_lost.is_set()
         self.device_lost = MPEvent()
- 
+
         super().__init__(name=name,
                          write_buffer=write_buffer,
                          **kwargs)
- 
+
     def _setup(self):
- 
+
         # Ignore Ctrl+C in this process. On Windows Ctrl+C is delivered to
         # every process attached to the console, not only the parent. A
         # KeyboardInterrupt here would abort the loop in the middle of a USB
@@ -148,21 +148,21 @@ class USB_ClientProcess(WProcess_R1):
         # parent catches Ctrl+C and calls stop(); the loop then exits after
         # the current frame and _teardown() stops the stream properly.
         signal.signal(signal.SIGINT, signal.SIG_IGN)
- 
+
         # Set image_id counter
         self.image_id = 0
- 
+
         # Error bookkeeping: print each distinct error once
         self._last_error = None
         self._n_errors = 0
- 
+
         # Opens the USB device here, inside the child process.
         # USB_HTPA.__init__ already calls open() + init() itself (init()
         # first stops a stream a previous run may have left running).
         self.usb_driver = None
         try:
             self.usb_driver = self.usb_driver_cls(**self.usb_driver_kwargs)
- 
+
             # Start continuous frame stream
             resp = self.usb_driver.start_stream(self.stream_cmd)
             print(f"[{self.name}] Stream started: {resp!r}")
@@ -172,31 +172,31 @@ class USB_ClientProcess(WProcess_R1):
             self._device_lost(f"could not start the device: {e}")
             self.write_buffer.put(self._lost_item())
             return
- 
+
         # Set time
         self.t0 = time.time()
         self._t_last_frame = time.monotonic()
- 
+
     def _target(self):
- 
+
         try:
             # Acquire one frame from the stream
             data = self.usb_driver.acquire_frame()
- 
+
         except Exception as e:
- 
+
             # Device gone: report once, hand a final 'device_lost' item to
             # the consumer and end the loop
             if not self.usb_driver.is_connected:
                 self._device_lost(str(e))
                 return self._lost_item()
- 
+
             # Errors only, for too long: treat as lost as well
             if time.monotonic() - self._t_last_frame > self.lost_after_s:
                 self._device_lost(f"no frame for {self.lost_after_s:g} s "
                                   f"(last error: {e})")
                 return self._lost_item()
- 
+
             # Other errors (timeout, sync error, ...): print each distinct
             # message once, and don't spin if the error comes back at once
             self._n_errors += 1
@@ -205,9 +205,9 @@ class USB_ClientProcess(WProcess_R1):
                 print(f"[{self.name}] {message}")
                 self._last_error = message
             time.sleep(0.05)
- 
+
             result = {'success': False}
- 
+
         else:
             if self._n_errors:
                 print(f"[{self.name}] Receiving frames again "
@@ -215,18 +215,156 @@ class USB_ClientProcess(WProcess_R1):
                 self._n_errors = 0
                 self._last_error = None
             self._t_last_frame = time.monotonic()
- 
+
             # Set success flag and store frame data
             result = {'success': True}
             result.update(data)
- 
+
         # Store image_id
         result['image_id'] = self.image_id
- 
+
         # Increment image_id
         self.image_id = self.image_id + 1
- 
+
         return result
+
+    def _device_lost(self, reason: str):
+        """Report the loss once, flag it for the parent, end the loop."""
+        serial = self.usb_driver_kwargs.get('serial_number', '?')
+        print(f"[{self.name}] Connection to device {serial} LOST: {reason}. "
+              f"Continuing without it.")
+        self.device_lost.set()
+        self._exit.set()
+
+    def _lost_item(self) -> dict:
+        """Final item for the consumer: tells it that no more frames come."""
+        return {'success': False,
+                'device_lost': True,
+                'serial_number': self.usb_driver_kwargs.get('serial_number'),
+                'image_id': self.image_id}
+
+    def _teardown(self):
+        # Runs inside the child process once the loop has exited: stop the
+        # stream and release the device. The loop only exits if the process
+        # is not blocked in write_buffer.put() - so stop this producer
+        # BEFORE its consumer (see usb-imshow-mp.py).
+        self._release_device()
+
+    def _release_device(self):
+        usb_driver = getattr(self, 'usb_driver', None)
+        if usb_driver is None:
+            return
+        self.usb_driver = None            # release only once
+        if usb_driver.is_streaming and usb_driver.is_connected:
+            try:
+                resp, leftovers = usb_driver.stop_stream()
+                print(f"[{self.name}] Stream stopped: {resp!r} "
+                      f"({len(leftovers)} leftover frames discarded)")
+            except Exception as e:
+                print(f"[{self.name}] Stopping stream failed: {e}")
+        try:
+            usb_driver.close()
+            print(f"[{self.name}] Device released.")
+        except Exception as e:
+            print(f"[{self.name}] Releasing device failed: {e}")
+
+    def stop(self):
+        # Only signals the child (this runs in the parent). The child's loop
+        # exits after the current frame and _teardown() stops the stream.
+        # Never terminate() this process, or the device keeps streaming.
+        self._exit.set()
+
+
+class UDP_PickleServerProcess(RProcess_R1):
+    """
+    Multiprocessing version of UDP_PickleServer. Reads arbitrary
+    (picklable) data from an upstream buffer, in its own process, and
+    sends it out via UDP to a single peer running a UDP_PickleClient /
+    UDP_PickleClientProcess.
+
+    Since a pickled payload can easily exceed the size of a single UDP
+    datagram, it is split into numbered chunks that are reassembled by
+    the receiver. As with any data sent over UDP, delivery is not
+    guaranteed: a message of which one or more chunks are lost in transit
+    is silently dropped by the receiver.
+    """
+
+    def __init__(self,
+                 name: str,
+                 read_buffer,
+                 target_ip: str,
+                 target_port: int,
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        read_buffer : Queue / SharedMemoryQueue
+            Buffer that data to be transmitted is read from.
+        target_ip, target_port : str, int
+            Address of the peer running UDP_PickleClient(Process).
+
+        Returns
+        -------
+        None.
+
+        """
+
+        self.target_ip = target_ip
+        self.target_port = target_port
+
+        super().__init__(name=name,
+                         read_buffer=read_buffer,
+                         **kwargs)
+
+    def _setup(self):
+
+        # The socket is created here, inside the child process -- not in
+        # __init__ -- so that this works regardless of multiprocessing
+        # start method ('fork', 'spawn' or 'forkserver').
+        self.target_addr = (self.target_ip, self.target_port)
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._msg_id = 0
+
+    def _target(self):
+
+        # Get data (e.g. a dict with a numpy array / pandas DataFrame)
+        # from the upstream buffer
+        data = self.read_buffer.get()
+
+        # Serialize it
+        payload = pkl.dumps(data)
+
+        # Split the payload into chunks that fit into a single UDP
+        # datagram
+        chunks = [payload[i:i + _PICKLE_MAX_CHUNK]
+                 for i in range(0, len(payload), _PICKLE_MAX_CHUNK)] or [b'']
+
+        chunk_count = len(chunks)
+
+        # Send every chunk in its own datagram, prefixed with a header
+        # that allows the receiver to reassemble the message
+        for chunk_index, chunk in enumerate(chunks):
+            header = struct.pack(_PICKLE_HEADER_FMT,
+                                 self._msg_id,
+                                 chunk_index,
+                                 chunk_count)
+            self._socket.sendto(header + chunk, self.target_addr)
+
+        # Increment (and wrap) the message id
+        self._msg_id = (self._msg_id + 1) % 2**32
+
+        return None
+
+    def _teardown(self):
+        # Runs inside the child process once the loop has exited. Unlike
+        # the threading version, stop() (which runs in the PARENT
+        # process) cannot reach into this socket -- it only exists in the
+        # child's memory -- so cleanup happens here instead.
+        self._socket.close()
+
+    def stop(self):
+        self._exit.set()
+
  
     def _device_lost(self, reason: str):
         """Report the loss once, flag it for the parent, end the loop."""

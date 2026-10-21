@@ -72,6 +72,11 @@ _RESP_CALIB_WRITE_DONE  = 'Write was successful'
 
 # ── Stream framing ───────────────────────────────────────────────────────────
 _SYNC_WORDS = (0xB0D0, 0xF046)                  # last two uint16 words of every frame
+
+# TPArray.DataCols group -> key in the dict returned by acquire_frame()
+# (names as in the I2C driver where it has the same quantity)
+_FRAME_PART_KEYS = {'e_off': 'eloff', 'vdd': 'vdd', 'T_amb': 'Tamb',
+                    'PTAT': 'ptat', 'ATC': 'atc'}
 _SYNC_BYTES = struct.pack('<2H', *_SYNC_WORDS)  # same, as they appear on the wire
 _N_SYNC     = len(_SYNC_WORDS)
 
@@ -193,6 +198,7 @@ class USB_HTPA(USB_Driver):
         self.ArrayType: Optional[int] = None
         self.tparray: Optional[TPArray] = None
         self.frame_len: Optional[int] = None   # uint16 words per frame, incl. sync words
+        self._frame_parts: List[Tuple[str, int, int]] = []   # (key, start, stop) per part
 
         # Open the device
         self.open()
@@ -370,6 +376,28 @@ class USB_HTPA(USB_Driver):
         self.ArrayType = int(array_type)
         self.tparray = TPArray(ArrayType=self.ArrayType)
         self.frame_len = self.calc_frame_len(self.tparray)
+        self._frame_parts = self._calc_frame_parts(self.tparray, self.frame_len)
+
+    @staticmethod
+    def _calc_frame_parts(tparray: TPArray, frame_len: int) -> List[Tuple[str, int, int]]:
+        """
+        Where each part of a stream frame lies, from the serial data order in
+        TPArray.DataCols:  pix | e_off | vdd | T_amb | PTAT | ATC.
+        Returns [(key in acquire_frame()'s dict, start, stop), ...] for the
+        non-pixel parts, or [] if TPArray's layout does not add up to the
+        frame length (then only 'aux' is available).
+        """
+        groups = tparray.DataCols.as_dict()
+        if sum(len(cols) for cols in groups.values()) + _N_SYNC != frame_len:
+            print(f"Warning: TPArray data layout of ArrayType {tparray.ArrayType} does not "
+                  f"match the frame length ({frame_len} words) - PTAT etc. not available.")
+            return []
+        parts, pos = [], 0
+        for group, cols in groups.items():
+            if group != 'pix' and cols:
+                parts.append((_FRAME_PART_KEYS.get(group, group), pos, pos + len(cols)))
+            pos += len(cols)
+        return parts
 
     @staticmethod
     def calc_frame_len(tparray: TPArray) -> int:
@@ -599,6 +627,12 @@ class USB_HTPA(USB_Driver):
                               (values are in dK)
             'aux'           : remaining non-pixel words of the frame (offsets,
                               PTAT, VDD, ...; layout depends on DesignGen)
+            'eloff', 'vdd', 'Tamb', 'ptat', 'atc'
+                            : the parts of 'aux', split according to
+                              TPArray.DataCols (np.ndarray each; a part the
+                              array type does not have is missing)
+            'ptat_avg'      : mean of 'ptat' (float), same key as in the
+                              I2C driver
             'frame_raw'     : the complete frame without sync words
             't'             : datetime of acquisition
             'serial_number' : device serial number
@@ -624,6 +658,13 @@ class USB_HTPA(USB_Driver):
 
         if self._stream_cmd == _CMD_STREAM_DK:
             data['pix_dK'] = data['pix']
+
+        # Non-pixel parts of the frame: 'eloff', 'vdd', 'Tamb', 'ptat', 'atc'
+        # (views into frame_raw, no copies), plus the PTAT average
+        for key, start, stop in self._frame_parts:
+            data[key] = frame[start:stop]
+        if 'ptat' in data:
+            data['ptat_avg'] = float(data['ptat'].mean())
 
         return data
 

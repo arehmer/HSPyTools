@@ -36,6 +36,8 @@ from hspytools.tparray import TPArray
 from hspy.drivers.i2c import I2C_HTPA32x32d
 from hspy.drivers.usb import USB_HTPA
 
+from hspy.ipc.plot_utils import TimeSeriesPlot
+
 
 class USB_Client(threading.Thread):
     """
@@ -562,6 +564,9 @@ class UDP_PickleClient(WThread_R1):
         self._socket.close()
 
 
+
+ 
+ 
 class ImshowDisplay(threading.Thread):
     """
     The only thread that calls OpenCV HighGUI functions. Other threads call
@@ -718,6 +723,8 @@ class Imshow(RThread_R1):
                  ArrayType:int = None,
                  SensorType:int = None,
                  display: Optional[ImshowDisplay] = None,           # CHANGED
+                 plot_ptat: bool = False,                           # ADDED
+                 plot_window_s: Optional[float] = None,             # ADDED
                  **kwargs):
  
         if ArrayType is None and SensorType is not None:
@@ -733,6 +740,12 @@ class Imshow(RThread_R1):
  
         # Window operations go to the display thread, or directly to cv2   # CHANGED
         self._gui = cv2 if display is None else display                    # CHANGED
+ 
+        # Line plot of data['ptat_avg'] below the image                    # ADDED
+        self.plot_ptat = plot_ptat                                         # ADDED
+        self.ptat_plot = TimeSeriesPlot(title='PTAT avg', unit='digits',   # ADDED
+                                        window_s=plot_window_s)            # ADDED
+        self._t_first = None                                               # ADDED
  
         # Set time
         self.t0 = time.time()
@@ -750,10 +763,7 @@ class Imshow(RThread_R1):
         # Check success flag of upstream thread
         if data['success'] == True:
  
-            if 'pix_dK' in data.keys():
-                frame = data['pix_dK']
-            else:
-                frame = data['pix']
+            frame = data['pix_dK']
  
             # Reshape if not the proper size
             if frame.ndim == 1:
@@ -866,6 +876,10 @@ class Imshow(RThread_R1):
                                 thickness,
                                 lineType)
  
+                # PTAT plot below the image                                # ADDED
+                if self.plot_ptat:                                         # ADDED
+                    frame = self._add_ptat_plot(frame, data)               # ADDED
+ 
                 self._gui.imshow(self.window_name,frame)                   # CHANGED
                 self._gui.waitKey(1)                                       # CHANGED
  
@@ -881,6 +895,17 @@ class Imshow(RThread_R1):
         # the console is restarted
         if self._exit.is_set():
             self._gui.destroyWindow(self.window_name)                      # CHANGED
+ 
+    def _add_ptat_plot(self, frame, data):                                 # ADDED
+        """Append data['ptat_avg'] to the history and stack the plot
+        below the image. The plot is a third of the image's height."""
+        if 'ptat_avg' in data:
+            t = data['t'].timestamp() if hasattr(data.get('t'), 'timestamp') else time.time()
+            if self._t_first is None:
+                self._t_first = t
+            self.ptat_plot.add(t - self._t_first, data['ptat_avg'])
+        panel = self.ptat_plot.render(frame.shape[1], frame.shape[0] // 3)
+        return np.vstack([frame, panel])
  
     def stop(self):
         self._exit.set()
