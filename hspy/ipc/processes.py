@@ -936,8 +936,6 @@ class ImshowProcess(RProcess_R1):
             # print(data.keys())
             frame = data['pix']
 
-        frame = data['pix_dK']
-
         # Reshape if not the proper size
         if frame.ndim == 1:
             frame = frame[0:self.num_pix]
