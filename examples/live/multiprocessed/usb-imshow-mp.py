@@ -97,7 +97,7 @@ if __name__ == '__main__':
     usb_process = USB_ClientProcess(usb_driver_cls = USB_HTPA,
                                     usb_driver_kwargs = {'serial_number': serial},
                                     write_buffer = usb_buffer,
-                                    stream_cmd = b'K',
+                                    stream_cmd = b't',
                                     profile = True,
                                     profile_every = 50)
 
