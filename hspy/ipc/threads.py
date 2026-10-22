@@ -1117,9 +1117,9 @@ class ImshowRecorder(Imshow):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(part, 'wb') as f:
-                pickle.dump(meta, f, protocol=pickle.HIGHEST_PROTOCOL)
+                pkl.dump(meta, f, protocol=pkl.HIGHEST_PROTOCOL)
                 for frame in frames:
-                    pickle.dump(frame, f, protocol=pickle.HIGHEST_PROTOCOL)
+                    pkl.dump(frame, f, protocol=pkl.HIGHEST_PROTOCOL)
                     time.sleep(0)         # yield the GIL to the display thread
             part.replace(path)            # complete -> final name
             print(f"[{self.name}] Saved {meta['n_frames']} frames to {path} "

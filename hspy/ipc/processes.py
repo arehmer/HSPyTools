@@ -1035,25 +1035,25 @@ _REC_SUFFIX = '.pkl'
 _PART_SUFFIX = '.part'
 _REC_FORMAT_VERSION = 1
         
-class _RecordingTap:
-    """
-    Stands in for read_buffer inside the child process: forwards get() to
-    the real buffer and hands every item to a callback before returning it.
-    Lets ImshowRecorderProcess reuse ImshowProcess._target() unchanged.
-    All other attributes are forwarded to the real buffer.
-    """
+# class _RecordingTap:
+#     """
+#     Stands in for read_buffer inside the child process: forwards get() to
+#     the real buffer and hands every item to a callback before returning it.
+#     Lets ImshowRecorderProcess reuse ImshowProcess._target() unchanged.
+#     All other attributes are forwarded to the real buffer.
+#     """
  
-    def __init__(self, buffer, on_item):
-        self._buffer = buffer
-        self._on_item = on_item
+#     def __init__(self, buffer, on_item):
+#         self._buffer = buffer
+#         self._on_item = on_item
  
-    def get(self, *args, **kwargs):
-        item = self._buffer.get(*args, **kwargs)
-        self._on_item(item)
-        return item
+#     def get(self, *args, **kwargs):
+#         item = self._buffer.get(*args, **kwargs)
+#         self._on_item(item)
+#         return item
  
-    def __getattr__(self, attr):
-        return getattr(self._buffer, attr)
+#     def __getattr__(self, attr):
+#         return getattr(self._buffer, attr)
  
  
 class _RecordingTap:
@@ -1482,3 +1482,599 @@ def load_recording(path: Union[str, Path]) -> Tuple[dict, List[dict]]:
             except EOFError:
                 break
     return meta, frames
+
+
+class PlotTimeSeries_Process(RProcess_R1):
+    """
+    Reads data from read_buffer (e.g. from Optris_ClientProcess) and shows
+    each value as a time series in a cv2 window, running entirely in its own
+    process. Every value gets its own panel; the panels are stacked
+    vertically in one window.
+ 
+    Expected items in read_buffer:
+        {'success': True, 'timestamp': datetime, '<key>': value, ...}
+    Items with success=False are skipped. A final 'device_lost' item (as
+    sent by Optris_ClientProcess) keeps the plot open and marks it with
+    'DEVICE LOST'.
+    """
+ 
+    # Panel titles and units for the Optris data keys. Hershey fonts used
+    # by cv2.putText cannot draw the degree sign, hence 'degC'.
+    TITLES = {'temp_process': 'Process temperature',
+              'temp_head': 'Head temperature',
+              'temp_box': 'Box temperature',
+              'temp_act': 'Temperature (act.)',
+              'eps': 'Emissivity',
+              'trans': 'Transmission'}
+ 
+    UNITS = {'temp_process': 'degC',
+             'temp_head': 'degC',
+             'temp_box': 'degC',
+             'temp_act': 'degC',
+             'eps': '-',
+             'trans': '-'}
+ 
+    # Keys in the incoming dicts that are bookkeeping, not data to plot
+    _META_KEYS = {'success', 'timestamp', 'sample_id', 'image_id',
+                  'device_lost', 'port', 'serial_number'}
+ 
+    def __init__(self,
+                 name: str,
+                 read_buffer,
+                 data_keys: list = None,
+                 window_name: str = 'Optris time series',
+                 plot_window_s: float = None,
+                 width: int = 800,
+                 panel_height: int = 200,
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        name : str
+            Process name.
+        read_buffer : Queue / SharedMemoryQueue
+            Buffer to read the data from, i.e. the write_buffer of the
+            Optris_ClientProcess.
+        data_keys : list of str, optional
+            Values to plot, e.g. ['temp_process', 'temp_head']. None
+            (default) plots every numeric value found in the first valid
+            item, i.e. whatever the producer was told to read.
+        window_name : str
+            Name of the cv2 window. Use distinct names when running
+            several plot processes.
+        plot_window_s : float, optional
+            Show only the last plot_window_s seconds; None (default) shows
+            everything since the start.
+        width : int
+            Window width in pixels.
+        panel_height : int
+            Height of each panel in pixels.
+ 
+        Returns
+        -------
+        None.
+ 
+        """
+ 
+        if isinstance(data_keys, str):
+            data_keys = [data_keys]
+        self.data_keys = list(data_keys) if data_keys is not None else None
+ 
+        self.window_name = window_name
+        self.plot_window_s = plot_window_s
+        self.width = width
+        self.panel_height = panel_height
+ 
+        super().__init__(name=name,
+                         read_buffer=read_buffer,
+                         **kwargs)
+ 
+    def _setup(self):
+ 
+        # Plot construction and window creation both happen here, inside
+        # the child process.
+        self.t0 = time.time()
+ 
+        # One TimeSeriesPlot per key, created on the first valid item
+        # (when data_keys=None, the keys are only known then)
+        self.plots = None
+        self._t_first = None
+        self._device_lost = False
+ 
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        self._show(self._message_image('Waiting for data ...'))
+ 
+    def _target(self):
+ 
+        # Get result from upstream process. The timeout keeps the window
+        # responsive and lets stop() end the loop while no data arrives.
+        try:
+            data = self.read_buffer.get(timeout=0.1)
+        except queue.Empty:
+            self._on_idle()
+            cv2.waitKey(1)
+            return
+ 
+        # Hook for subclasses (e.g. recording), sees every item first
+        self._on_item(data)
+ 
+        # Producer lost its device: no more data will come
+        if data.get('device_lost'):
+            self._device_lost = True
+            self._show(self._render())
+            return
+ 
+        # Failed poll: nothing to plot
+        if not data.get('success', True):
+            cv2.waitKey(1)
+            return
+ 
+        # Create the plots on the first valid item
+        if self.plots is None:
+            self._create_plots(data)
+ 
+        # Time axis: seconds since the first item, from the item's own
+        # timestamp if it has one
+        t = data.get('timestamp')
+        t = t.timestamp() if hasattr(t, 'timestamp') else time.time()
+        if self._t_first is None:
+            self._t_first = t
+ 
+        # Append the new values to the history
+        for key, plot in self.plots.items():
+            if key in data:
+                plot.add(t - self._t_first, data[key])
+ 
+        self._show(self._render())
+ 
+    def _on_item(self, data):
+        """Called for every item from read_buffer before it is plotted.
+        Override in subclasses, e.g. PlotTimeSeries_ProcessRecord."""
+        pass
+ 
+    def _on_idle(self):
+        """Called every 0.1 s while no item arrives. Override in
+        subclasses."""
+        pass
+ 
+    def _create_plots(self, data):
+        """Create one TimeSeriesPlot per key to plot."""
+        keys = self.data_keys
+        if keys is None:
+            keys = [k for k, v in data.items()
+                    if k not in self._META_KEYS
+                    and isinstance(v, (int, float, np.number))
+                    and not isinstance(v, bool)]
+        else:
+            missing = [k for k in keys if k not in data]
+            if missing:
+                print(f"[{self.name}] Keys {missing} are not in the data "
+                      f"(available: {list(data)}); their panels stay empty.")
+ 
+        self.plots = {key: TimeSeriesPlot(title=self.TITLES.get(key, key),
+                                          unit=self.UNITS.get(key, ''),
+                                          window_s=self.plot_window_s)
+                      for key in keys}
+ 
+    def _render(self):
+        """Stack the panels of all plots into one image."""
+        if not self.plots:
+            image = self._message_image('No data')
+        else:
+            panels = [plot.render(self.width, self.panel_height)
+                      for plot in self.plots.values()]
+            image = np.vstack(panels)
+ 
+        if self._device_lost:
+            # Top right corner, clear of the panel title
+            text, font, scale, thick = 'DEVICE LOST', cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2
+            (w, h), _ = cv2.getTextSize(text, font, scale, thick)
+            cv2.putText(image, text, (image.shape[1] - w - 10, h + 10),
+                        font, scale, (0, 0, 255), thick, cv2.LINE_AA)
+        return image
+ 
+    def _message_image(self, text):
+        """Blank panel with a short message, shown before data arrives."""
+        image = np.zeros((self.panel_height, self.width, 3), dtype=np.uint8)
+        cv2.putText(image, text, (10, self.panel_height // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1,
+                    cv2.LINE_AA)
+        return image
+ 
+    def _show(self, image):
+        cv2.imshow(self.window_name, image)
+        cv2.waitKey(1)
+ 
+    def _teardown(self):
+        # Window is destroyed here, inside the child process, once the
+        # loop has exited.
+        cv2.destroyWindow(self.window_name)
+ 
+    def stop(self):
+        self._exit.set()
+        
+
+class PlotTimeSeries_ProcessRecord(PlotTimeSeries_Process):
+    """
+    PlotTimeSeries_Process with recording. Plots every item exactly like
+    PlotTimeSeries_Process; between start_recording() and stop_recording()
+    every successfully received item dict (timestamp + values) is also kept
+    and, once recording stops, written to a pickle file in the background.
+ 
+    start_recording() / stop_recording() / wait_until_saved() are called
+    from the PARENT process (e.g. the main script reacting to user input).
+    """
+ 
+    def __init__(self,
+                 name: str,
+                 read_buffer,
+                 data_keys: Optional[Sequence[str]] = None,
+                 window_name: str = 'Optris time series',
+                 record_dir: Union[str, Path] = '.',
+                 record_keys: Optional[Sequence[str]] = None,
+                 exclude_keys: Sequence[str] = ('success',),
+                 save_on_stop: bool = True,
+                 window_geometry: Optional[Tuple[int, int, int, int]] = None,
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        name, read_buffer, data_keys, window_name, **kwargs :
+            As for PlotTimeSeries_Process (e.g. plot_window_s, width,
+            panel_height, profile=True).
+        window_geometry : (x, y, width, height), optional
+            Position and size of the window on screen. Use different values
+            per process so that several windows don't open on top of each
+            other. None keeps OpenCV's default.
+        record_dir : str or Path
+            Directory recordings are written to when start_recording() is
+            called without a file path. Created if it does not exist.
+        record_keys : sequence of str, optional
+            Keys of the item dict to record. None (default) records all
+            keys except exclude_keys, i.e. 'timestamp', 'sample_id' and
+            every value the producer reads -- also values that are not
+            plotted.
+        exclude_keys : sequence of str
+            Keys never recorded. Default: ('success',), since only
+            successful items are recorded anyway.
+        save_on_stop : bool
+            If True (default) and a recording is still running when the
+            process is stopped, it is written to file before the process
+            exits.
+        """
+ 
+        super().__init__(name=name,
+                         read_buffer=read_buffer,
+                         data_keys=data_keys,
+                         window_name=window_name,
+                         **kwargs)
+ 
+        self.record_dir = Path(record_dir)
+        self.record_keys = None if record_keys is None else tuple(record_keys)
+        self.exclude_keys = tuple(exclude_keys)
+        self.save_on_stop = save_on_stop
+        self.window_geometry = window_geometry
+ 
+        # Parent -> child: ('start', path, t_start, meta) / ('stop', t_stop, discard)
+        #                  / ('clear_plot',)
+        # Child -> parent: ('saved', path, n_items) / ('failed', path, error)
+        # Created here in the parent; multiprocessing queues are made to
+        # cross the process boundary (unlike locks, sockets, devices).
+        self._cmd_queue = MPQueue()
+        self._status_queue = MPQueue()
+ 
+        # Parent-side view of the recording state (only used in the parent)
+        self._parent_recording = False
+        self._parent_path: Optional[Path] = None
+        self._parent_pending = 0          # saves requested but not yet confirmed
+ 
+    # ── Commands (PARENT process) ────────────────────────────────────────
+ 
+    @property
+    def is_recording(self) -> bool:
+        """True between start_recording() and stop_recording() (parent view)."""
+        return self._parent_recording
+ 
+    def start_recording(self,
+                        file_path: Union[str, Path, None] = None,
+                        meta: Optional[dict] = None) -> Path:
+        """
+        Start recording. Returns the path the recording will be written to.
+ 
+        file_path : target file. Default:
+                    <record_dir>/<process name>_<YYYYmmdd_HHMMSS>.pkl
+        meta      : optional dict of extra information (e.g. measurement
+                    conditions) stored in the file's metadata. Must be
+                    picklable. The built-in keys (t_start, n_items, ...)
+                    take precedence over keys of the same name.
+        """
+        if self._parent_recording:
+            raise RuntimeError(f"[{self.name}] Already recording to {self._parent_path}")
+ 
+        t_start = datetime.now()
+        if file_path is None:
+            stamp = t_start.strftime('%Y%m%d_%H%M%S')
+            file_path = self.record_dir / f'{self.name}_{stamp}{_REC_SUFFIX}'
+        file_path = Path(file_path)
+ 
+        self._cmd_queue.put(('start', str(file_path), t_start, dict(meta or {})))
+        self._parent_recording = True
+        self._parent_path = file_path
+        return file_path
+ 
+    def stop_recording(self, discard: bool = False) -> Optional[Path]:
+        """
+        Stop recording. The child writes the file in the background; this
+        returns immediately with the file path, or None if no recording
+        was running. Use wait_until_saved() to wait for the file.
+ 
+        discard : if True, the recorded items are thrown away and no file
+                  is written (e.g. when a measurement was aborted). Returns
+                  None in that case.
+        """
+        if not self._parent_recording:
+            return None
+        self._cmd_queue.put(('stop', datetime.now(), discard))
+        self._parent_recording = False
+        if discard:
+            return None
+        self._parent_pending += 1
+        return self._parent_path
+ 
+    def clear_plot(self) -> None:
+        """
+        Clear all time series plots; the time axis starts again at 0 with
+        the next item. Does not affect a running recording.
+        """
+        self._cmd_queue.put(('clear_plot',))
+ 
+    def wait_until_saved(self, timeout: Optional[float] = None) -> List[tuple]:
+        """
+        Wait until the child confirms every recording stopped so far.
+ 
+        Returns the confirmations received, each ('saved', path, n_items)
+        or ('failed', path, error). Fewer entries than recordings means the
+        timeout expired first.
+        """
+        results = []
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self._parent_pending > 0:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                break
+            try:
+                results.append(self._status_queue.get(timeout=remaining))
+            except queue.Empty:
+                break
+            self._parent_pending -= 1
+        return results
+ 
+    def stop(self):
+        # A running recording is saved by the child on its way out
+        if self._parent_recording and self.save_on_stop:
+            self._parent_recording = False
+            self._parent_pending += 1
+        super().stop()
+ 
+    # ── Reading a recording (any process) ────────────────────────────────
+ 
+    @staticmethod
+    def load_recording(path: Union[str, Path]) -> Tuple[dict, List[dict]]:
+        """
+        Read a recording written by this class. Returns (meta, items),
+        where items is the list of recorded dicts, e.g.
+        {'timestamp': datetime, 'temp_process': 36.6, ..., 'sample_id': 0}.
+ 
+        To get a pandas DataFrame:
+            meta, items = PlotTimeSeries_ProcessRecord.load_recording(path)
+            df = pd.DataFrame(items).set_index('timestamp')
+        """
+        items = []
+        with open(path, 'rb') as f:
+            meta = pkl.load(f)
+            while True:
+                try:
+                    items.append(pkl.load(f))
+                except EOFError:
+                    break
+        return meta, items
+ 
+    # ── Child process ────────────────────────────────────────────────────
+ 
+    def _setup(self):
+ 
+        # Ignore Ctrl+C in this process. On Linux (and Windows) Ctrl+C is
+        # delivered to every process attached to the terminal, which would
+        # kill this process mid-recording. The parent catches Ctrl+C and
+        # shuts down via stop(), which saves a running recording.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+ 
+        # Window and plot state exactly like PlotTimeSeries_Process
+        super()._setup()
+ 
+        # Place the window
+        if self.window_geometry is not None:
+            x, y, w, h = self.window_geometry
+            try:
+                cv2.resizeWindow(self.window_name, w, h)
+                cv2.moveWindow(self.window_name, x, y)
+            except cv2.error:
+                pass
+ 
+        # Recording state -- lives only in the child, only touched by the
+        # child's main thread (the plot loop)
+        self._rec_active = False
+        self._rec_items: List[dict] = []
+        self._rec_path: Optional[Path] = None
+        self._rec_t_start: Optional[datetime] = None
+        self._rec_meta: dict = {}
+        self._rec_writers: List[threading.Thread] = []
+        self._rec_title_shown = None
+        self._rec_device_lost = False      # device lost during the current recording
+        self._rec_keys_seen: List[str] = []   # value keys of the recorded items
+ 
+        self._update_title()
+ 
+    def _on_item(self, data):
+        """Called by PlotTimeSeries_Process._target() for every item,
+        before it is plotted."""
+ 
+        self._poll_commands()
+ 
+        if isinstance(data, dict) and data.get('device_lost'):
+            if not self._device_lost:
+                self._device_lost = True
+                print(f"[{self.name}] Device lost - the plot shows the data "
+                      f"received so far.")
+            if self._rec_active:
+                self._rec_device_lost = True
+ 
+        if self._rec_active and isinstance(data, dict) and data.get('success') is True:
+            item = self._select_keys(data)
+            if not self._rec_items:
+                self._rec_keys_seen = list(item)
+            self._rec_items.append(item)
+ 
+        self._update_title()
+ 
+    def _on_idle(self):
+        """Called by PlotTimeSeries_Process._target() while no item arrives."""
+        self._poll_commands()
+        self._update_title()
+ 
+    def _poll_commands(self):
+        while True:
+            try:
+                cmd = self._cmd_queue.get_nowait()
+            except queue.Empty:
+                return
+ 
+            if cmd[0] == 'start':
+                if self._rec_active:                 # should not happen
+                    self._save(datetime.now())
+                _, path, t_start, meta = cmd
+                self._rec_items = []
+                self._rec_keys_seen = []
+                self._rec_path = Path(path)
+                self._rec_t_start = t_start
+                self._rec_meta = meta
+                self._rec_device_lost = self._device_lost
+                self._rec_active = True
+                if self._device_lost:
+                    print(f"[{self.name}] Recording started, but the device is lost: "
+                          f"the file will contain no data -> {path}")
+                else:
+                    print(f"[{self.name}] Recording started -> {path}")
+ 
+            elif cmd[0] == 'stop':
+                _, t_stop, discard = cmd
+                if discard:
+                    self._discard()
+                else:
+                    self._save(t_stop)
+ 
+            elif cmd[0] == 'clear_plot':
+                # Plots are created again from the next item, and the time
+                # axis restarts at 0 (see PlotTimeSeries_Process._target)
+                self.plots = None
+                self._t_first = None
+                self._show(self._message_image('Plot cleared - waiting for data ...'))
+ 
+    def _discard(self):
+        """Stop recording and throw the items away."""
+        if not self._rec_active:
+            return
+        print(f"[{self.name}] Recording discarded ({len(self._rec_items)} items): "
+              f"{self._rec_path}")
+        self._rec_active = False
+        self._rec_items = []
+ 
+    def _save(self, t_stop: datetime):
+        """Stop recording and write the items in a writer thread."""
+        if not self._rec_active:
+            return
+        self._rec_active = False
+        items, self._rec_items = self._rec_items, []
+ 
+        meta = {**self._rec_meta,                         # user meta first ...
+                'format_version': _REC_FORMAT_VERSION,    # ... built-in keys win
+                'source': self.name,
+                'window_name': self.window_name,
+                'keys': self._rec_keys_seen,              # keys of each item
+                'plotted_keys': list(self.plots) if self.plots else None,
+                't_start': self._rec_t_start,
+                't_stop': t_stop,
+                'n_items': len(items),
+                'device_lost': self._rec_device_lost}     # True: data stops early
+ 
+        print(f"[{self.name}] Recording stopped: {len(items)} items, "
+              f"writing {self._rec_path} ...")
+ 
+        writer = threading.Thread(target=self._write_recording,
+                                  args=(self._rec_path, meta, items),
+                                  name=f'{self.name}_writer',
+                                  daemon=False)
+        self._rec_writers.append(writer)
+        writer.start()
+ 
+    def _write_recording(self, path: Path, meta: dict, items: List[dict]) -> None:
+        """Runs in a writer thread inside the child process."""
+        part = path.with_name(path.name + _PART_SUFFIX)
+        t0 = time.perf_counter()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(part, 'wb') as f:
+                pkl.dump(meta, f, protocol=pkl.HIGHEST_PROTOCOL)
+                for item in items:
+                    pkl.dump(item, f, protocol=pkl.HIGHEST_PROTOCOL)
+            part.replace(path)            # complete -> final name
+            print(f"[{self.name}] Saved {meta['n_items']} items to {path} "
+                  f"({path.stat().st_size / 1e3:.1f} kB, "
+                  f"{time.perf_counter() - t0:.2f} s)")
+            self._status_queue.put(('saved', str(path), meta['n_items']))
+        except Exception as e:
+            print(f"[{self.name}] Writing {path} failed: {e}")
+            try:
+                part.unlink()
+            except OSError:
+                pass
+            self._status_queue.put(('failed', str(path), str(e)))
+ 
+    def _update_title(self):
+        # Show the recording / connection state in the window title
+        state = (self._rec_active, self._device_lost)
+        if state != self._rec_title_shown:
+            self._rec_title_shown = state
+            title = self.window_name
+            if self._device_lost:
+                title += '  [DISCONNECTED]'
+            if self._rec_active:
+                title += '  [REC]'
+            try:
+                cv2.setWindowTitle(self.window_name, title)
+            except cv2.error:
+                pass
+ 
+    def _select_keys(self, data: dict) -> dict:
+        if self.record_keys is not None:
+            return {k: data[k] for k in self.record_keys if k in data}
+        return {k: v for k, v in data.items() if k not in self.exclude_keys}
+ 
+    def _teardown(self):
+ 
+        # Commands that arrived after the last item
+        self._poll_commands()
+ 
+        # Recording still running when the process was stopped
+        if self._rec_active:
+            if self.save_on_stop:
+                self._save(datetime.now())
+            else:
+                self._discard()
+ 
+        # Do not exit before every file is completely written
+        for writer in self._rec_writers:
+            writer.join()
+ 
+        # Destroy the window (PlotTimeSeries_Process)
+        super()._teardown()
